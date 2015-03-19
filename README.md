@@ -1,1 +1,1 @@
-# RESOLVE - A new Bayesian algorithm for aperture synthesis imaging in radio astronomy
+# RESOLVE - A Bayesian algorithm for aperture synthesis imaging in radio astronomy
