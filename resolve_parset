@@ -1,0 +1,61 @@
+%main parameters
+ms  
+imsize
+cellsize
+algorithm 'ln-map'
+init_type_s 'dirty'
+use_init_s False
+init_type_p 'k-2_mon'
+lastit None
+freq [0,0]
+pbeam None
+uncertainty False
+noise_est None
+map_algo 'sd'
+pspec_algo 'cg'
+barea 1
+map_conv 1e-1
+pspec_conv 1e-1
+save None
+callback 3
+plot False
+simulating False
+restfreq [0,0]
+
+%numerical parameters
+m_start 0.1
+m_a_start 0.1
+global_iter 50
+global_iter_a 50
+M0_start 0
+M0_start_a 0
+bin 70
+bin_a 70
+p0 1
+p0_a 1
+alpha_prior None
+alpha_prior_a None
+smoothing 10.
+smoothing_a 10.
+pspec_tol 1e-3
+pspec_tol_a 1e-3
+pspec_clevel 3
+pspec_clevel_a 3
+pspec_iter 150
+pspec_iter_a 150
+map_alpha 1e-4
+map_alpha_a 1e-4
+map_tol 1e-5
+map_tol_a 1e-5
+map_clevel 3
+map_clevel_a 3
+map_iter 100
+map_iter_a 100
+ncpu 2
+ncpu_a 2
+nrun 8
+nrun_a 8
+wb_globiter 10
+
+
+
