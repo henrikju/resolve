@@ -1,3 +1,23 @@
+"""
+general_IO.py
+Written by Henrik Junklewitz
+
+General_IO.py is part of the RESOLVE package and provides CASA specific reading routines for measuremnet sets.
+
+
+Copyright 2014 Henrik Junklewitz
+RESOLVE is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+RESOLVE is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU General Public License for more details.
+You should have received a copy of the GNU General Public License
+along with RESOLVE. If not, see <http://www.gnu.org/licenses/>.
+"""
+
 from casa import ms
 import numpy as np
 import Messenger as M
