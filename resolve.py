@@ -2,7 +2,8 @@
 resolve.py
 Written by Henrik Junklewitz
 
-RESOLVE is...
+Resolve.py defines the main function that runs RESOLVE on a measurement 
+set with radio interferometric data.
 
 Copyright 2014 Henrik Junklewitz
 
