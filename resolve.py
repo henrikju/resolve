@@ -873,23 +873,23 @@ class N_operator(operator):
     
     def _multiply(self, x):
         
-        sigma = self.para[0]
+        variance = self.para[0]
         
-        mask = sigma>0
-        sigma[sigma==0] = 1.
+        mask = variance>0
+        variance[variance==0] = 1.
 
-        Ntemp = diagonal_operator(domain=self.domain, diag = sigma**2)
+        Ntemp = diagonal_operator(domain=self.domain, diag = variance)
 
         return mask * Ntemp(x)
 
     def _inverse_multiply(self, x):
         
-        sigma = self.para[0]
+        variance = self.para[0]
         
-        mask = sigma>0
-        sigma[sigma==0] = 1.
+        mask = variance>0
+        variance[variance==0] = 1.
 
-        Ntemp = diagonal_operator(domain=self.domain, diag = sigma**2)
+        Ntemp = diagonal_operator(domain=self.domain, diag = variance)
 
         return mask * Ntemp.inverse_times(x)
         
