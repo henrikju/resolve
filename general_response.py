@@ -137,6 +137,10 @@ class response_mfs(operator):
                 
                 if normloop == False:
                     temp /=  normalize_R_mfs(self.domain, u, v, i,j,A)
+                    
+                if normloop == False:
+                    temp /= self.target.num()
+                    
                 visval = np.append(visval,temp)
             #pass
         
