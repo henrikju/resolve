@@ -52,6 +52,9 @@ class response(operator):
         if normloop == False:
             dgridvis /=  normalize_R(self.domain, self.target, u, v, A)
             #pass
+            
+        if normloop == False:
+            dgridvis /= self.target.num()
         
         return field(domain = self.target, val = dgridvis, \
             datatype = np.complex128)
