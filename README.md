@@ -19,7 +19,7 @@ Prerequisite libraries:
 - the general Fourier transform package [gfft](https://github.com/mrbell/nifty)
 - the radio astronomical data reduction package CASA
 
-RESOLVE is started as a python function directly from an opened CASA shell. This is needed for the moment to ensure full measurement set support. To this end, it might be needed to make sure that CASA and nifty are using the same python installation (since CASA comes with its own python package). If needed, you can simply add your global python installation to the CASA library path. A more independent version with direct command line syntax is in work.
+RESOLVE is started as a python function directly from an opened CASA shell by simply importing resolve.py as a python module. This is needed for the moment to ensure full measurement set support. To this end, it might be needed to make sure that CASA and nifty are using the same python installation (since CASA comes with its own python package). If needed, you can simply add your global python installation to the CASA library path. A more independent version with direct command line syntax is in work.
 
 ------------------------------------------------------------------------------------------------------------------------------
 
