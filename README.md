@@ -8,8 +8,21 @@ RESOLVE is a Bayesian inference algorithm for image reconstruction in radio inte
 - full support for measurement sets.
 - included simulation tool (if uv-coverage is provided).
 
-For the moment, the algorithm probably won't perform optimally for strong point sources and wide field data.
+For the moment, the algorithm won't perform optimally under the presence of strong point sources and with wide field data.
 
-For more information, please refer soon to the [RESOLVE Wiki](https://github.com/henrikju/resolve/wiki).
+--------------------------------------------------------------------------------------------------------------------------------
+Quick installation guide
+--------------------------------------------------------------------------------------------------------------------------------
+
+Prerequisite libraries:
+- the statistical inference package [nifty](https://github.com/information-field-theory/nifty)
+- the general Fourier transform package [gfft](https://github.com/mrbell/nifty)
+- the radio astronomical data reduction package CASA
+
+RESOLVE is started as a python function directly from an opened CASA shell. This is needed for the moment to ensure full measurement set support. To this end, it might be needed to make sure that CASA and nifty are using the same python installation (since CASA comes with its own python package). If needed, you can simply add your global python installation to the CASA library path. A more independent version with direct command line syntax is in work.
+
+------------------------------------------------------------------------------------------------------------------------------
+
+For more information, soon, you can refer to the [RESOLVE Wiki](https://github.com/henrikju/resolve/wiki).
 
 RESOLVE is licensed under the [GPLv3](http://www.gnu.org/licenses/gpl.html).
