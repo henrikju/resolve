@@ -33,6 +33,7 @@ import Messenger as M
 import general_response as r
 from general_IO import read_data_from_ms
 from nifty import nifty_tools as nt
+import scipy.ndimage.interpolation as sci
 from casa import ms as mst
 from casa import image as ia 
 import casa
@@ -49,11 +50,11 @@ asec2rad = 4.84813681e-6
 
 
 def resolve(ms, imsize, cellsize, algorithm = 'ln-map', init_type_s = 'dirty',\
-    use_init_s = False, init_type_p = 'k-2_mon', init_type_p_a = 'k-2_mon',\
-    lastit = None, freq = [0,0] , pbeam = None, uncertainty = False, \
+    use_init_s = False, init_type_p = 'k-2_mon', init_type_p_a = 'k-2',\
+    freq = [0,0] , pbeam = None, uncertainty = False, \
     noise_est = None, map_algo = 'sd', pspec_algo = 'cg', barea = 1, \
-    map_conv = 1e-1, pspec_conv = 1e-1, save = None, callback = 3, \
-    plot = False, simulating = False, restfreq = [0,0], use_parset = False,
+    map_conv = 1e-1, pspec_conv = 1e-1, save = 'standard', callback = 3, \
+    plot = False, simulating = False, reffreq = [0,0], use_parset = False,
     **kwargs):
 
     """
@@ -71,25 +72,29 @@ def resolve(ms, imsize, cellsize, algorithm = 'ln-map', init_type_s = 'dirty',\
             init_type_s: What input should be used to fix the monopole of the map
                 by effectively estimating rho_0.
                 1) 'dirty'
-                2) 'user-defined'
-            use_init_s: Whether to use the init_type_s as a starting guess \
-                (default is False and uses a constant map close to zero).
+                2) '<user-defined input image pathname>'
+            use_init_s: Defines what is used as a starting guess 
+                1) False (default): Use a constant field close to zero
+                2) 'starting_guess': Use the field defined in init_type_s
+                3) '<lastit path/filename>': Load from previous iteration
             init_type_p: Starting guess for the power spectrum.
                 1) 'k^2': Simple k^2 power spectrum.
                 2) 'k^2_mon': Simple k^2 power spectrum with fixed monopole.
-                3) 'zero': Zero power spectrum.
-            init_type_p_a: Starting guess for the power spectrum.
+                3) 'constant': constant power spectrum using p0 from the 
+                    numparameters.
+                4) '<lastit path/filename>': Load from previous iteration
+            init_type_p_a: Starting guess for the spectral index power spectrum.
                 1) 'k^2': Simple k^2 power spectrum.
-                2) 'k^2_mon': Simple k^2 power spectrum with fixed monopole.
-                3) 'zero': Zero power spectrum.
-            lastit: Integer n or None. Whether to start with iteration n.
+                3) 'constant': constant power spectrum using p0_a from the 
+                    numparameters.
+                4) 4) '<lastit path/filename>': Load from previous iteration
             freq: Whether to perform single band or wide band RESOLVE.
                 1) [spw,cha]: single band
                 2) 'wideband'
             pbeam: user-povided primary beam pattern.
             uncertainty: Whether to attempt calculating an uncertainty map \
                 (EXPENSIVE!).
-            noise_est: Whether to take the measure noise variances or make an \
+            noise_est: Whether to take the measured noise variances or make an \
                 estimate for them.
                 1) 'simple': simply try to estimate the noise variance using \
                     the rms in the visibilties.
@@ -111,7 +116,10 @@ def resolve(ms, imsize, cellsize, algorithm = 'ln-map', init_type_s = 'dirty',\
             callback: If given integer n, save every nth sub-iteration of \
                 intermediate optimization routines.
             plot: Interactively plot diagnostical plots. Only advised for testing.
-            simulate: Whether to simulate a signal or not. 
+            simulate: Whether to simulate a signal or not.
+            reffreq: reference-frequency, only needed for wideband mode.
+            use_parset: whether to use the parameter-set file for parameter
+                parsing.
         
         kwargs:
             Set numerical or simulational parameters. All are set to tested and \
@@ -138,7 +146,7 @@ def resolve(ms, imsize, cellsize, algorithm = 'ln-map', init_type_s = 'dirty',\
                         use_init_s, init_type_p, init_type_p_a, lastit, freq, \
                         pbeam, uncertainty, noise_est, map_algo, pspec_algo, \
                         barea, map_conv, pspec_conv, save, callback, \
-                        plot, simulating, restfreq)
+                        plot, simulating, reffreq)
                         
         numparams = numparameters(params, kwargs)
     
@@ -146,7 +154,7 @@ def resolve(ms, imsize, cellsize, algorithm = 'ln-map', init_type_s = 'dirty',\
         
         simparams = simparameters(params, kwargs)
                                                     
-    # Prepare a number of diagnostics if requested
+    # Prepare a number of diagnostics and save settings if requested
     if params.plot:
         pl.ion()
     else:
@@ -185,42 +193,47 @@ def resolve(ms, imsize, cellsize, algorithm = 'ln-map', init_type_s = 'dirty',\
     
     # Begin: Starting guesses for m *******************************************
 
-    # estimate rho0, the constant part of the lognormal field rho = rho0 exp(s)
-    # effectively sets a different prior mean so that the field doesn't go to 
-    # zero in first iterations     
     if init_type_s == 'dirty':
         mtemp = field(s_space, target=s_space.get_codomain(), val=di)
 
     else:
-        # Read-in userimage and convert to Jy/px
-        mtemp = field(s_space, target=s_space.get_codomain(), \
-                      val=np.load('userimage.npy')/params.barea)
+        # Read-in userimage, convert to Jy/px and transpose to Resolve
+        userimage = read_image_from_CASA(init_type_s,numparams.zoomfactor)
+        mtemp = field(s_space, target=s_space.get_codomain(), val=userimage)
 
-    
-    rho0 = np.mean(mtemp.val[np.where(mtemp.val>=np.max(mtemp.val) / 4)])
+    # estimate rho0, the constant part of the lognormal field rho = rho0 exp(s)
+    # effectively sets a different prior mean so that the field doesn't go to
+    # zero in first iterations
+    rho0 = np.mean(mtemp.val[np.where(mtemp.val>=np.max(mtemp.val) / 10)])
     logger.message('rho0: ' + str(rho0))
+    np.save('resolve_output_' + str(params.save)+'/general/rho0',rho0)
     if rho0 < 0:
         logger.warn('Monopole level of starting guess negative. Probably due \
             to too many imaging artifcts in userimage')
         
     # Starting guess for m, either constant close to zero, or lastit from
     # a file with save-basis-string 'save', or directly from the user
-    if lastit == None:
+    
+    if use_init_s == False:
         m_I = field(s_space, val = numparams.m_start)
         if freq == 'wideband':
             m_a = field(s_space, val = numparams.m_a_start)
-    elif lastit != None:
+
+    elif use_init_s == 'starting_guess':
+        if freq == 'wideband':
+            m_I = field(s_space, val = np.log(np.abs(mtemp)))
+            m_a = field(s_space, val = numparams.m_a_start)
+        else:
+            m_I = field(s_space, val = np.log(np.abs(mtemp)))
+            
+    else:
         logger.message('using last m-iteration from previous run.')
         if freq == 'wideband':
-            m_I = field(s_space, val = np.load(params.save + str(lastit) + \
-            "_m.npy"))
-            m_a = field(s_space, val = np.load(params.save + str(lastit) + \
-            "_m_a.npy"))
+            m_I = field(s_space, val = np.load(use_init_s))
+            m_a = field(s_space, val = np.load(use_init_s))
         else:
-            m_I = field(s_space, val = np.load(params.save + str(lastit) + \
-            "_m.npy"))
-    elif use_init_s:
-        m_I = field(s_space, val = np.log(np.abs(mtemp)))
+            m_I = field(s_space, val = np.load(use_init_s))
+            
 
     # Begin: Starting guesses for pspec ***************************************
 
@@ -242,40 +255,43 @@ def resolve(ms, imsize, cellsize, algorithm = 'ln-map', init_type_s = 'dirty',\
         #see notes, use average power in dirty map to constrain monopole
         pspec[0] = (np.prod(k_space.vol)**(-2) * np.log(\
             np.sqrt(pspec_mtemp[0]) *  np.prod(k_space.vol))**2) / 2.
-    # zero power spectrum guess 
-    elif params.init_type_p == 'zero':
-        pspec = 0
+    # default simple k^2 spectrum with free monopole
+    elif params.init_type_p == 'k^2':
+        pspec = np.array((1+kindex)**-2 * numparams.p0)    
+    # constant power spectrum guess 
+    elif params.init_type_p == 'constant':
+        pspec = numparams.p0
     # power spectrum from last iteration 
-    elif lastit != None:
-        logger.message('using last p-iteration from previous run.')
-        pspec = np.load(params.save + str(lastit) + "_p.npy")
-    # default simple k^2 spectrum with free monopole    
     else:
-        pspec = np.array((1+kindex)**-2 * numparams.p0)
+        logger.message('using last p-iteration from previous run.')
+        pspec = np.load(params.init_type_p)
         
     if freq == 'wideband':
-        # zero power spectrum guess 
-        if init_type_p_a == 'zero':
-            pspec_a = 0
+        # default simple k^2 spectrum with free monopole
+        if params.init_type_p_a == 'k^2':
+            pspec = np.array((1+kindex)**-2 * numparams.p0_a)    
+        # constant power spectrum guess 
+        elif params.init_type_p_a == 'constant':
+            pspec = numparams.p0_a
         # power spectrum from last iteration 
-        elif lastit != None:
-            logger.message('using last p-iteration from previous run.')
-            pspec_a = np.load(params.save + str(lastit) + "_p.npy")
-        # default simple k^2 spectrum with free monopole    
         else:
-            pspec_a = np.array((1+kindex)**-2 * numparams.p0_a) 
+            logger.message('using last p-iteration from previous run.')
+            pspec = np.load(params.init_type_p_a)
+
  
     # diagnostic plot of m starting guess
     if params.save:
         save_results(np.exp(m_I.val),"TI exp(Starting guess)",\
             'resolve_output_' + str(params.save) + '/m_reconstructions/' +\
             params.save + "_expm0", rho0 = rho0)
-        write_output_to_fits(np.transpose(np.exp(m_I.val)/rho0),params, notifier='0', mode='I')
+        write_output_to_fits(np.transpose(np.exp(m_I.val)*rho0),params, \
+            notifier='0', mode='I')
         if freq == 'wideband':
            save_results(m_a.val,"Alpha Starting guess",\
             'resolve_output_' + str(params.save) + '/m_reconstructions/' +\
             params.save + "_ma0", rho0 = rho0) 
-           write_output_to_fits(np.transpose(m_I.val/rho0),params, notifier='0', mode='a') 
+           write_output_to_fits(np.transpose(m_I.val),params, notifier='0', \
+               mode='a') 
            
     # Begin: Start Filter *****************************************************
 
@@ -294,7 +310,7 @@ def resolve(ms, imsize, cellsize, algorithm = 'ln-map', init_type_s = 'dirty',\
             #wide-band I/alpha-Filter
             t1 = time()
             wideband_git = 0
-            while(wideband_git < params.wb_globiter):
+            while(wideband_git < numparams.wb_globiter):
 
                 #I-Filter                                                                                                                                                                              
                 m_I, p_I, = mapfilter_I(d, m_I, pspec, N, R, logger, rho0,\
@@ -333,7 +349,7 @@ def resolve(ms, imsize, cellsize, algorithm = 'ln-map', init_type_s = 'dirty',\
         save_results(np.exp(m_I.val),"exp(Solution m)",\
             'resolve_output_' + str(params.save) + '/m_reconstructions/' + \
             params.save + "_expmfinal", rho0 = rho0)
-        write_output_to_fits(np.transpose(np.exp(m_I.val)/rho0),params, notifier='final',mode='I')
+        write_output_to_fits(np.transpose(np.exp(m_I.val)*rho0),params, notifier='final',mode='I')
         
         if params.freq == 'wideband':
             save_results(m_a.val,"Solution a",\
@@ -434,15 +450,18 @@ def datasetup(params, logger):
         # response operator
         R = r.response_mfs(s_space, sym=False, imp=True, target=d_space, \
                            para=[u,v,A,nspw,nchan,False,freqs,\
-                           params.restfreq[0],params.restfreq[1],nvis])
+                           params.reffreq[0],params.reffreq[1],nvis])
     
         d = field(d_space, val=np.array(vis).flatten())
 
         N = N_operator(domain=d_space,imp=True,para=[variance])
         
-        # dirty image from CASA for comparison
-        di = make_dirtyimage(params, logger)
-
+        # dirty image from CASA or Resolve for comparison
+        if params.init_type_s=='dirty':
+            di = make_dirtyimage(params, logger)
+        else:
+            di = R.adjoint_times(d) * s_space.vol[0] * s_space.vol[1]
+            
         # more diagnostics if requested
         if params.save:
             # plot the dirty beam
@@ -494,8 +513,11 @@ def datasetup(params, logger):
 
         N = N_operator(domain=d_space,imp=True,para=[variance])
         
-        # dirty image from CASA for comparison
-        di = make_dirtyimage(params, logger)
+        # dirty image from CASA or Resolve for comparison
+        if params.init_type_s=='dirty':
+            di = make_dirtyimage(params, logger)
+        else:
+            di = R.adjoint_times(d) * s_space.vol[0] * s_space.vol[1]
 
         # more diagnostics if requested
         if params.save:
@@ -554,7 +576,7 @@ def mapfilter_I(d, m, pspec, N, R, logger, rho0, k_space, params, numparams,\
                 str(wideband_git) + '_j',rho0 = rho0)
         else:
             save_results(j,"j",'resolve_output_' + str(params.save) +\
-                '/general/' + params.save + 'j',rho0 = rho0)
+                '/general/' + params.save + '_j',rho0 = rho0)
 
     # iteration parameters
     convergence = 0
@@ -596,14 +618,14 @@ def mapfilter_I(d, m, pspec, N, R, logger, rho0, k_space, params, numparams,\
                     'resolve_output_' + str(params.save) +\
                     '/m_reconstructions/' + params.save + "_expm" +\
                     str(wideband_git) + "_" + str(git), rho0 = rho0)
-                write_output_to_fits(np.transpose(exp(m.val)/rho0),params, \
+                write_output_to_fits(np.transpose(exp(m.val)*rho0),params, \
                     notifier = str(wideband_git) + "_" + str(git),mode = 'I')
             else:
                 save_results(exp(m.val), "map, iter #" + str(git), \
                     'resolve_output_' + str(params.save) +\
                     '/m_reconstructions/' + params.save + "_expm" + str(git), \
                     rho0 = rho0)
-                write_output_to_fits(np.transpose(exp(m.val)/rho0),params,\
+                write_output_to_fits(np.transpose(exp(m.val)*rho0),params,\
                 notifier = str(git), mode='I')
 
         logger.header2("Computing the power spectrum.\n")
@@ -984,16 +1006,15 @@ class energy(object):
         self.j = args[0]
         self.S = args[1]
         self.M = args[2]
-        self.A = args[3]
+        self.rho0= args[3]
         
     def H(self,x):
         """
         """
-
+        expx = self.rho0 * exp(x)
         part1 = x.dot(self.S.inverse_times(x.weight(power = 0)))  / 2
-        part2 = self.j.dot(self.A * exp(x))
-        
-        part3 = self.A * exp(x).dot(self.M(self.A * exp(x))) / 2
+        part2 = self.j.dot(expx)       
+        part3 = expx.dot(self.M(expx)) / 2
         
         
         return part1 - part2 + part3
@@ -1001,20 +1022,14 @@ class energy(object):
     def gradH(self, x):
         """
         """
-#        print 'x', x.domain
-#        print 'j', self.j.domain
-#        print 'M', self.M.domain
-#        print 'S', self.S.domain.get_codomain()
-#        print 'codo', self.S.domain.get_codomain()
-#        
-#        x = field(self.S.domain.get_codomain(), val=x)
+        
+        expx = self.rho0 * exp(x)
     
-        temp1 = self.S.inverse_times(x)
-        #temp1 = temp1.weight(power=2)
-        temp = -self.j * self.A * exp(x) + self.A* exp(x) * \
-            self.M(self.A * exp(x)) + temp1
+        Sx = self.S.inverse_times(x)
+        expxMexpx = expx * self.M(expx)      
+        full = -self.j * expx + expxMexpx + Sx
     
-        return temp
+        return full
     
     def egg(self, x):
         
@@ -1111,6 +1126,8 @@ class Da_operator(operator):
         return x_
         
 class energy_a(object):
+
+    
     
     def __init__(self, args):
         self.d = args[0]
@@ -1122,27 +1139,31 @@ class energy_a(object):
     def Ha(self,a):
         """
         """
+        
+        expI = exp(self.m_I)
 
         part1 = a.dot(self.S.inverse_times(a))/2
 
         part2 = self.R.adjoint_times(self.N.inverse_times(self.d), a = a).dot(\
-            exp(self.m_I))
+            expI)
 
         Mexp = self.R.adjoint_times(self.N.inverse_times(\
-            self.R(exp(self.m_I), a = a)), a = a)
+            self.R(expI, a = a)), a = a)
 
-        part3 = (exp(self.m_I)).dot(Mexp)/2.
+        part3 = expI.dot(Mexp)/2.
 
         return part1 - part2 + part3
     
     def gradHa(self, a):
         """
         """
+        
+        expI = exp(self.m_I)
 
         temp = - self.R.adjoint_times(self.N.inverse_times(self.d), a = a, \
-            mode = 'grad') * exp(self.m_I) + exp(self.m_I) * \
+            mode = 'grad') * expI + expI * \
             self.R.adjoint_times(self.N.inverse_times(self.R.times( \
-            exp(self.m_I), a = a)), a = a, mode = 'grad') + \
+            expI, a = a)), a = a, mode = 'grad') + \
             self.S.inverse_times(a)
 
         return temp
@@ -1163,7 +1184,7 @@ class parameters(object):
                  use_init_s, init_type_p, init_type_p_a, lastit, freq, pbeam, \
                  uncertainty, noise_est, map_algo, pspec_algo, barea,\
                  map_conv, pspec_conv, save, callback, plot, simulating,\
-                 restfreq):
+                 reffreq):
 
         self.ms = ms
         self.imsize = imsize
@@ -1187,7 +1208,7 @@ class parameters(object):
         self.callback = callback
         self.plot = plot
         self.simulating = simulating
-        self.restfreq = restfreq
+        self.reffreq = reffreq
         
         
         # a few global parameters needed for callbackfunc
@@ -1360,6 +1381,11 @@ class numparameters(object):
            if params.freq == 'wideband':
                 self.nrun_a = 8
                 
+        if 'zoomfactor' in kwargs:
+            self.zoomfactor = kwargs['zoomfactor']
+        else:
+            self.zoomfactor = 1.
+                
         if params.freq == 'wideband':
             if 'wb_globiter' in kwargs:
                 self.wb_globiter = kwargs['wb_globiter']
@@ -1457,7 +1483,49 @@ def make_dirtyimage(params, logger):
 
     
     return di
-                
+
+def read_image_from_CASA(casaimagename,zoomfactor):
+
+    ia.open(casaimagename)
+    imageinfo = ia.summary(casaimagename)
+
+    norm = imageinfo['incr'][1]/np.pi*180*3600  #cellsize converted to arcsec
+
+    beamdict = ia.restoringbeam()
+    major = beamdict['major']['value'] / norm
+    minor = beamdict['minor']['value'] / norm
+
+    image = ia.getchunk().reshape(imageinfo['shape'][0],imageinfo['shape'][1])\
+        / (1.13 * major * minor)
+
+    ia.close()
+    
+    image = sci.zoom(image,zoom=zoomfactor)
+    
+    return convert_CASA_to_RES(image)
+
+def convert_CASA_to_RES(imagearray_fromCASA):
+    """
+    Converts on image from CASA to be used internally in RESOLVE. e.g. as a
+    starting guess.
+    """
+    #with resepect to CASA, the imagearray is already rotated by 90 degrees
+    #clockwise because of 0-point-shift between CASAIM/FITS and python.
+    return np.transpose(imagearray_fromCASA)
+    
+def convert_RES_to_CASA(imagearray_fromRES,FITS=False):
+    """
+    Converts on image from RESOLVE to be used externally, e.g. as an end result
+    image.
+    """
+    #Internally the image only needs to be back-transposed because the FITS
+    #output will automatically rotate the image
+    if FITS:
+        return np.transpose(imagearray_fromRES)
+    #For direct comparison, all matplotlib images are correctly changed to
+    #reflect the original CASA output
+    else:
+        return np.transpose(np.rot90(imagearray_fromRES,-1))
 
 def callbackfunc(x, i):
     
@@ -1466,7 +1534,7 @@ def callbackfunc(x, i):
         
         if gsave:
            pl.figure()
-           pl.imshow(np.exp(x))
+           pl.imshow(convert_CASA_to_RES(np.exp(x)))
            pl.colorbar()
            pl.title('Iteration' + str(i))
            pl.savefig('resolve_output_' + str(gsave)+ \
@@ -1485,7 +1553,7 @@ def simulate(params, simparams, logger):
 
     # wide-band imaging
     if params.freq == 'wideband':
-        logger.message('Wideband imaging not yet implemented')
+        logger.message('Wideband simulation not yet implemented')
     # single-band imaging
     else:
         nspw,chan = params.freq[0], params.freq[1]
@@ -1566,6 +1634,7 @@ def simulate(params, simparams, logger):
 
     d = R(exp(I) + Ip) + n
     
+    
     # reset imsize settings for requested parameters
     s_space = rg_space(params.imsize, naxes=2, dist = params.cellsize, \
         zerocenter=True)
@@ -1606,7 +1675,7 @@ def parse_input_file(infile):
                         parset['pspec_algo'], parset['barea'], \
                         parset['map_conv'], parset['pspec_conv'],\
                         pasret['save'], parset['callback'], parset['plot'],\
-                        parset['simulating'], parset['restfreq'])       
+                        parset['simulating'], parset['reffreq'])       
     
     numparams = numparameters(params, parset)
 
@@ -1617,7 +1686,7 @@ def write_output_to_fits(m, params, notifier='',mode='I'):
     """
     """
 
-    hdu_main = pyfits.PrimaryHDU(m)
+    hdu_main = pyfits.PrimaryHDU(convert_RES_to_CASA(m,FITS=True))
     
     try:
         generate_fitsheader(hdu_main, params)
@@ -1665,7 +1734,7 @@ def generate_fitsheader(hdu, params):
     hdu.header.update('CRVAL1', params.summary['field_0']['direction']\
     ['m0']['value'], 'Reference value')
     
-    hdu.header.update('CDELT1', params.cellsize, 'Size of pixel bin')
+    hdu.header.update('CDELT1', -1 * params.cellsize, 'Size of pixel bin')
     
     hdu.header.update('NAXIS2', params.imsize,
                       'Length of the RA axis')
@@ -1695,8 +1764,6 @@ def generate_fitsheader(hdu, params):
     
 def save_results(value,title,fname,log = None,value2 = None, \
     value3= None, plotpar = None, rho0 = 1., twoplot=False):
-        
-    rho0 = 1
     
     # produce plot and save it as png file   
     pl.figure()
@@ -1712,7 +1779,7 @@ def save_results(value,title,fname,log = None,value2 = None, \
                 pl.semilogy(value3,plotpar)
         else :
             if len(np.shape(value)) > 1:
-                pl.imshow(value/rho0)
+                pl.imshow(convert_RES_to_CASA(value) * rho0)
                 pl.colorbar()
             else:
                 pl.plot(value,value2,plotpar)
@@ -1729,7 +1796,7 @@ def save_results(value,title,fname,log = None,value2 = None, \
                 pl.semilogy(value3)
         else :
             if len(np.shape(value)) > 1:
-                pl.imshow(value/rho0)
+                pl.imshow(convert_RES_to_CASA(value) * rho0)
                 pl.colorbar()
             else:
                 pl.plot(value,value2)
@@ -1738,10 +1805,7 @@ def save_results(value,title,fname,log = None,value2 = None, \
     pl.close
     
     # save data as npy-file
-    if rho0 != 1.:
-       np.save(fname,value/rho0)
-    else:
-       np.save(fname,value)
+       np.save(fname,convert_RES_to_CASA(value) * rho0)
 
 
 #*******************************************************************************
