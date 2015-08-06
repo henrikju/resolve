@@ -134,12 +134,13 @@ def read_data_from_ms(msfn, viscol="DATA", noisecol='SIGMA',
               m.warn('Warning: Different flags for different correlations/channels.'+
             'Hard flag is applied: If any correlation is flagged, this gets'+ 
             'extended to all.')
-          maximum = np.ones(np.shape(flags[0]))
-          for i in range(4):
-              if flags[i].sum() < maximum.sum():
-                  maximum = flags[i]
-          flag = maximum
-                
+              maximum = np.ones(np.shape(flags[0]))
+              for i in range(4):
+                  if flags[i].sum() < maximum.sum():
+                      maximum = flags[i]
+              flag = maximum
+          else:
+              flag = flags[0]      
 
           #Start reading data.
 
@@ -196,7 +197,10 @@ def read_data_from_ms(msfn, viscol="DATA", noisecol='SIGMA',
           u.append(utemp)
           v.append(vtemp)
     
-    summary = ms.summary()
+    try:
+        summary = ms.summary()
+    except:
+        print "Warning: Could not create a summary"
     ms.close()
 
     if mode =='tot':
