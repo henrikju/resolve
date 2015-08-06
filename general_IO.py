@@ -201,6 +201,8 @@ def read_data_from_ms(msfn, viscol="DATA", noisecol='SIGMA',
         summary = ms.summary()
     except:
         print "Warning: Could not create a summary"
+        summary = None        
+        
     ms.close()
 
     if mode =='tot':
