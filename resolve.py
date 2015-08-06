@@ -392,7 +392,7 @@ def resolve(ms, imsize, cellsize, algorithm = 'ln-map', init_type_s = 'dirty',\
 
                 #a-Filter                                                                                                                                                                              
                 m_a, p_a, = mapfilter_a(d, m_a, pspec_a, N, R, logger, rho0,\
-                k_space, params, numparams, m_I, wideband_git)
+                k_space, params, numparams, np.log(np.exp(m_I)+np.exp(u_I)), wideband_git)
 
 
                 wideband_git += 1
