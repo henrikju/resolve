@@ -43,7 +43,6 @@ import datetime
 import scipy.stats as sc
 
 
-
 #a few global constants
 q = 1e-15
 C = 299792458
@@ -223,9 +222,12 @@ def resolve(ms, imsize, cellsize, algorithm = 'ln-map', init_type_s = 'dirty',\
         # Read-in userimage, convert to Jy/px and transpose to Resolve
             userimage_u = read_image_from_CASA(init_type_s_u,numparams.zoomfactor)
             utemp = field(s_space, target=s_space.get_codomain(), val=userimage_u)
+            
     # estimate rho0, the constant part of the lognormal field rho = rho0 exp(s)
     # effectively sets a different prior mean so that the field doesn't go to
-    # zero in first iterations
+    # zero in first iterations. TODO: Maybe estimate rho0 from combined m+u
+    # starting guess?
+    
     rho0 = np.mean(mtemp.val[np.where(mtemp.val>=np.max(mtemp.val) / 10)])
     logger.message('rho0: ' + str(rho0))
     np.save('resolve_output_' + str(params.save)+'/general/rho0',rho0)
@@ -243,10 +245,10 @@ def resolve(ms, imsize, cellsize, algorithm = 'ln-map', init_type_s = 'dirty',\
 
     elif use_init_s == 'starting_guess':
         if freq == 'wideband':
-            m_I = field(s_space, val = np.log(np.abs(mtemp)))
+            m_I = field(s_space, val = np.log(np.abs(mtemp / rho0)))
             m_a = field(s_space, val = numparams.m_a_start)
         else:
-            m_I = field(s_space, val = np.log(np.abs(mtemp)))
+            m_I = field(s_space, val = np.log(np.abs(mtemp / rho0)))
             
     else:
         logger.message('using last m-iteration from previous run.')
@@ -263,7 +265,7 @@ def resolve(ms, imsize, cellsize, algorithm = 'ln-map', init_type_s = 'dirty',\
             u_I = field(s_space, val = numparams.u_start)
 
         elif use_init_s_u == 'starting_guess':
-            u_I = field(s_space, val = np.log(np.abs(utemp)))
+            u_I = field(s_space, val = np.log(np.abs(utemp /rho0)))
             
         else:
             logger.message('using last m-iteration from previous run.')
