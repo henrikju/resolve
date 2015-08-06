@@ -4,8 +4,11 @@ imsize
 cellsize
 algorithm 'ln-map'
 init_type_s 'dirty'
-use_init_s False
+use_init_s False       
+init_type_s_u 'dirty'
+use_init_s_u False 
 init_type_p 'k-2_mon'
+init_type_p_a 'k-2'
 lastit None
 freq [0,0]
 pbeam None
@@ -33,6 +36,8 @@ bin 70
 bin_a 70
 p0 1
 p0_a 1
+beta 1.5
+eta 1e-7
 alpha_prior None
 alpha_prior_a None
 smoothing 10.
@@ -44,12 +49,16 @@ pspec_clevel_a 3
 pspec_iter 150
 pspec_iter_a 150
 map_alpha 1e-4
+map_alpha_u 1e-4
 map_alpha_a 1e-4
 map_tol 1e-5
+map_tol_u 1e-5
 map_tol_a 1e-5
 map_clevel 3
+map_clevel_u 3
 map_clevel_a 3
 map_iter 100
+map_iter_u 100
 map_iter_a 100
 ncpu 2
 ncpu_a 2

@@ -382,6 +382,8 @@ def resolve(ms, imsize, cellsize, algorithm = 'ln-map', init_type_s = 'dirty',\
             
         else:
             #wide-band I/alpha-Filter
+            logger.message('This mode is not tested thorourgh.')
+            logger.message('save files of the wideband migth be misleading.')
             t1 = time()
             wideband_git = 0
             while(wideband_git < numparams.wb_globiter):
@@ -843,10 +845,7 @@ def mapfilter_I_u(d, m,u, pspec, N, R, logger, rho0, k_space, params, numparams,
     convergence = 0
     git = 1
     plist = [pspec]
-    mlist = [m]
-    B = 1.5
-    NU = 1e-7
-    
+    mlist = [m]    
 
     while git <= numparams.global_iter:
         """
@@ -866,7 +865,7 @@ def mapfilter_I_u(d, m,u, pspec, N, R, logger, rho0, k_space, params, numparams,
         mold = m
         uold = u
 
-        args = (j, S, M, rho0, B, NU,m,u)
+        args = (j, S, M, rho0, numparams.beta, numparams.eta,m,u)
         en = energy_mu(args) 
                
         minimize = nt.steepest_descent(en.egg_s,spam=callbackfunc_m,note=True)
@@ -1565,11 +1564,6 @@ class numparameters(object):
         else:
             if params.freq == 'wideband':
                 self.m_a_start = 0.1
-                
-        if 'm_start' in kwargs:
-            self.u_start = kwargs['m_start']
-        else: 
-            self.u_start = 0.1            
             
         if 'global_iter' in kwargs:
             self.global_iter = kwargs['global_iter']
@@ -1610,7 +1604,17 @@ class numparameters(object):
         else:
            if params.freq == 'wideband':
                 self.p0_a = 1.
-           
+        
+        if 'beta' in kwargs:
+            self.beta = kwargs['beta']
+        else:
+            self.beta = 1.5
+            
+        if 'eta' in kwargs:
+            self.beta = kwargs['eta']
+        else:
+            self.beta = 1e-7
+            
         if 'alpha_prior' in kwargs:
            self.alpha_prior = kwargs['alpha_prior']
         else:
@@ -1659,7 +1663,7 @@ class numparameters(object):
            self.pspec_iter_a = kwargs['pspec_iter_a']
         else:
            if params.freq == 'wideband':
-                self.pspec_iter = 150
+                self.pspec_iter_a = 150
            
         if 'map_alpha' in kwargs:
            self.map_alpha = kwargs['map_alpha']
@@ -2054,7 +2058,8 @@ def parse_input_file(infile):
 
     params = parameters(parset['ms'], parset['imsize'], parset['cellsize'],\
                         parset['algorithm'], parset['init_type_s'], \
-                        parset['use_init_s'], parset['init_type_p'], \
+                        parset['use_init_s'],parset['init_type_s_u'],\
+                        parset['use_init_s_u'], parset['init_type_p'], \
                         parset['init_type_p_a'], parset['lastit'], \
                         parset['freq'], parset['pbeam'],parset['uncertainty'],\
                         parset['noise_est'], parset['map_algo'],\
