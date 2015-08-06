@@ -28,6 +28,7 @@ restfreq [0,0]
 %numerical parameters
 m_start 0.1
 m_a_start 0.1
+u_start 0.1
 global_iter 50
 global_iter_a 50
 M0_start 0

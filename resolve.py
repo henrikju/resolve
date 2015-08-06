@@ -1564,6 +1564,11 @@ class numparameters(object):
         else:
             if params.freq == 'wideband':
                 self.m_a_start = 0.1
+                
+        if 'u_start' in kwargs:
+            self.u_start = kwargs['u_start']
+        else: 
+            self.u_start = 0.1               
             
         if 'global_iter' in kwargs:
             self.global_iter = kwargs['global_iter']
@@ -1611,9 +1616,9 @@ class numparameters(object):
             self.beta = 1.5
             
         if 'eta' in kwargs:
-            self.beta = kwargs['eta']
+            self.eta = kwargs['eta']
         else:
-            self.beta = 1e-7
+            self.eta = 1e-7
             
         if 'alpha_prior' in kwargs:
            self.alpha_prior = kwargs['alpha_prior']
