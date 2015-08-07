@@ -209,10 +209,15 @@ def resolve(ms, imsize, cellsize, algorithm = 'ln-map', init_type_s = 'dirty',\
         mtemp = field(s_space, target=s_space.get_codomain(), val=di)   
         
     else:
-        # Read-in userimage, convert to Jy/px and transpose to Resolve
-        userimage = read_image_from_CASA(init_type_s,numparams.zoomfactor)
-        mtemp = field(s_space, target=s_space.get_codomain(), val=userimage)
-        
+        try:
+            # Read-in userimage, convert to Jy/px and transpose to Resolve
+            userimage = read_image_from_CASA(init_type_s,numparams.zoomfactor)
+            mtemp = field(s_space, target=s_space.get_codomain(), val=userimage)
+        except:
+            logger.warn("Couldt not find a starting guess image at path" + init_type_s)
+            logger.message("Default read in of dirty image as starting guess")
+            mtemp = field(s_space, target=s_space.get_codomain(), val=di)
+            
     if params.algorithm == 'ln-map_u':   
         
         if init_type_s_u == 'dirty':
