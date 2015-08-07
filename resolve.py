@@ -1850,7 +1850,7 @@ def make_dirtyimage(params, logger):
     call(["rm", "-rf", "di.residual"])
 
     
-    return di
+    return convert_CASA_to_RES(di)
 
 def read_image_from_CASA(casaimagename,zoomfactor):
 
