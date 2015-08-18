@@ -1906,7 +1906,7 @@ def callbackfunc(x, i):
         
         if gsave:
            pl.figure()
-           pl.imshow(convert_CASA_to_RES(np.exp(x)))
+           pl.imshow(convert_RES_to_CASA(np.exp(x)))
            pl.colorbar()
            pl.title('Iteration' + str(i))
            pl.savefig('resolve_output_' + str(gsave)+ \
