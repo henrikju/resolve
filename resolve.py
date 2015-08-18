@@ -48,16 +48,14 @@ q = 1e-15
 C = 299792458
 asec2rad = 4.84813681e-6
 
-
-
 def resolve(ms, imsize, cellsize, algorithm = 'ln-map', init_type_s = 'dirty',\
     use_init_s = False,init_type_s_u = 'dirty',use_init_s_u = False, \
     init_type_p = 'k^2_mon', init_type_p_a = 'k-2',lastit =None,\
     freq = [0,0] , pbeam = None, uncertainty = False, \
     noise_est = None, map_algo = 'sd', pspec_algo = 'cg', barea = 1, \
     map_conv = 1e-1, pspec_conv = 1e-1, save = 'standard', callback = 3, \
-    plot = False, simulating = False, reffreq = [0,0], use_parset = False,
-    **kwargs):
+    plot = False, simulating = False, reffreq = [0,0], use_parset = False,\
+    viscol = 'data', **kwargs):
 
     """
         A RESOLVE-reconstruction.
@@ -123,6 +121,7 @@ def resolve(ms, imsize, cellsize, algorithm = 'ln-map', init_type_s = 'dirty',\
             reffreq: reference-frequency, only needed for wideband mode.
             use_parset: whether to use the parameter-set file for parameter
                 parsing.
+            viscol: from which MS-column to read the visibility data.
         
         kwargs:
             Set numerical or simulational parameters. All are set to tested and \
@@ -150,7 +149,7 @@ def resolve(ms, imsize, cellsize, algorithm = 'ln-map', init_type_s = 'dirty',\
                         init_type_p_a, lastit, freq, \
                         pbeam, uncertainty, noise_est, map_algo, pspec_algo, \
                         barea, map_conv, pspec_conv, save, callback, \
-                        plot, simulating, reffreq)
+                        plot, simulating, reffreq, viscol)
                         
         numparams = numparameters(params, kwargs)
     
@@ -464,10 +463,10 @@ def datasetup(params, logger):
 
     if params.noise_est == 'simple':
         vis, sigma, u, v, freqs, nchan, nspw, nvis, summary = \
-            read_data_from_ms(params.ms, noise_est = True)
+            read_data_from_ms(params.ms, viscol = params.viscol, noise_est = True)
     else:
         vis, sigma, u, v, freqs, nchan, nspw, nvis, summary = \
-            read_data_from_ms(params.ms)
+            read_data_from_ms(params.ms, viscol = params.viscol)
     
     params.summary = summary
     
@@ -1293,7 +1292,7 @@ class energy(object):
     def H(self,x):
         """
         """
-        expx = self.rho0 * exp(x)
+        expx = field(domain = x.domain, val = self.rho0 * exp(x))
         part1 = x.dot(self.S.inverse_times(x.weight(power = 0)))  / 2
         part2 = self.j.dot(expx)       
         part3 = expx.dot(self.M(expx)) / 2
@@ -1305,7 +1304,7 @@ class energy(object):
         """
         """
         
-        expx = self.rho0 * exp(x)
+        expx = field(domain = x.domain, val = self.rho0 * exp(x))
     
         Sx = self.S.inverse_times(x)
         expxMexpx = expx * self.M(expx)      
@@ -1523,7 +1522,7 @@ class parameters(object):
                  use_init_s,init_type_s_u,use_init_s_u, init_type_p, init_type_p_a, lastit, freq, pbeam, \
                  uncertainty, noise_est, map_algo, pspec_algo, barea,\
                  map_conv, pspec_conv, save, callback, plot, simulating,\
-                 reffreq):
+                 reffreq, viscol):
 
         self.ms = ms
         self.imsize = imsize
@@ -1550,7 +1549,7 @@ class parameters(object):
         self.plot = plot
         self.simulating = simulating
         self.reffreq = reffreq
-        
+        self.viscol = viscol
         
         # a few global parameters needed for callbackfunc
         global gcallback
