@@ -48,7 +48,7 @@ class response(operator):
         N = domain.dim(split = True)
         temp = np.zeros(N)
         #volume factor for real delta peak
-        temp[N[0]/2, N[1]/2] = 1. / domain.vol.prod()
+        temp[N[0]/2, N[1]/2] = 1. #/ domain.vol.prod()
         self.normR = np.max(self.times(temp))
     
         #calclate correct flux normalization Rd; 'psf peak = 1'
