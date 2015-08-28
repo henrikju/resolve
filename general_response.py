@@ -27,7 +27,37 @@ class response(operator):
     """
     """
 
-    def __init__(self,j,S,M,rho0):
+    def __init__(self,domain,target,u,v,A):
+
+        #necessary nifty inputs
+        self.sym = False
+        self.uni = False
+        self.imp = True
+        self.domain = domain
+        self.target = target
+
+        self.u = u
+        self.v = v
+
+        #primary beam
+        self.A = A
+
+        #calculate correct flux normalization R; 'psf peak = 1'
+        self.normloop = True
+        self.normR = 1.
+        N = domain.dim(split = True)
+        temp = np.zeros(N)
+        #volume factor for real delta peak
+        temp[N[0]/2, N[1]/2] = 1. / domain.vol.prod()
+        self.normR = np.max(self.times(temp))
+    
+        #calclate correct flux normalization Rd; 'psf peak = 1'
+        self.normRd = 1.
+        temp = np.ones(target.dim(),dtype=np.complex128)
+        self.normRd = np.max(self.adjoint_times(temp))
+        
+        del temp
+        self.normloop = False
 
     def _multiply(self, expI):
         """
@@ -36,26 +66,17 @@ class response(operator):
         Nx = self.domain.dim(split = True)[0]
         dy = self.domain.dist()[1] 
         Ny = self.domain.dim(split = True)[1]
-        u = self.para[0]
-        v = self.para[1]
-        normloop = self.para[3]
-        A = self.para[2]
-        
-        #Volumefactor from R(Vs) if the signal is a density       
-#        if normloop == False:            
-#            expI = expI.weight()
 
-        
-        dgridvis = gf.gfft(A * expI.val, in_ax = [(dx, Nx), (dy, Ny)], \
-            out_ax = [u,v], ftmachine = 'fft', in_zero_center = True, \
+        dgridvis = gf.gfft(self.A * expI.val, in_ax = [(dx, Nx), (dy, Ny)], \
+            out_ax = [self.u,self.v], ftmachine = 'fft', in_zero_center = True, \
             out_zero_center = True, enforce_hermitian_symmetry = True, W = 6, \
             alpha=1.5 ,verbose=False)
             
-        if normloop == False:
-            dgridvis /=  normalize_R(self.domain, self.target, u, v, A)
-            #pass
+        #flux normalization
+        dgridvis /=  self.normR
             
-        if normloop == False:
+        #fft normalization
+        if self.normloop == False:
             dgridvis /= self.target.num()
         
         return field(domain = self.target, val = dgridvis, \
@@ -65,36 +86,28 @@ class response(operator):
     def _adjoint_multiply(self, x):
         """
         """
-        u = self.para[0]
-        v = self.para[1]
+
         dx = self.domain.dist()[0] 
         Nx = self.domain.dim(split = True)[0]
         dy = self.domain.dist()[1] 
         Ny = self.domain.dim(split = True)[1]
-        normloop = self.para[3]
-        A = self.para[2]
         
-        gridvis = gf.gfft(x.val, in_ax =  [u,v], out_ax = [(dx, Nx), (dy, Ny)],\
-            ftmachine = 'ifft', in_zero_center = True, \
+        gridvis = gf.gfft(x.val, in_ax =  [self.u,self.v], out_ax = \
+            [(dx, Nx), (dy, Ny)],ftmachine = 'ifft', in_zero_center = True, \
             out_zero_center = True, enforce_hermitian_symmetry = True, W = 6, \
             alpha=1.5 ,verbose=False)
-
+                          
             
-#        gridvis = self.domain.calc_weight(gridvis,power=1)
-#        gridvis *= self.domain.dim(split=False)
-#        gridvis /= dx * dy 
+        expI = field(domain = self.domain, val = np.real(gridvis))
         
-        if normloop == False:
-            gridvis /=  normalize_Rd(self.domain, self.target, u, v, A)
-            #pass
-        
-        expI = field(domain = self.domain, val = gridvis)
-        
-        #Volumefactor from R(Vs) for "signal is not a density"       
-        if normloop == False:            
+        #flux normalization
+        expI /=  self.normRd
+
+        #normalization from R(Vs) for "signal is not a density";also fft       
+        if self.normloop == False:
             expI = expI.weight(power=-1)
         
-        return A * expI
+        return self.A * expI
         
         
 class response_mfs(operator):

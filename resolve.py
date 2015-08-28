@@ -198,7 +198,8 @@ def resolve(ms, imsize, cellsize, algorithm = 'ln-map', init_type_s = 'dirty',\
 
     # data setup
     if simulating:
-        d, N, R, di, d_space, s_space = simulate(params, simparams, logger)
+        d, N, R, di, d_space, s_space, expI, n = simulate(params, simparams, logger)
+        return d, N, R, di, d_space, s_space, expI, n
     else:
         d, N, R, di, d_space, s_space = datasetup(params, logger)
     
@@ -588,8 +589,7 @@ def datasetup(params, logger):
         else:
             A = 1.
         # response operator
-        R = r.response(s_space, sym=False, imp=True, target=d_space, \
-                       para=[u,v,A,False])
+        R = r.response(s_space, d_space, u, v, A)
     
         d = field(d_space, val=vis)
 
@@ -2014,8 +2014,7 @@ def simulate(params, simparams, logger):
     
     # response, no simulated primary beam
     A = 1.
-    R = r.response(s_space, sym=False, imp=True, target=d_space, \
-                       para=[u,v,A,False])
+    R = r.response(s_space, d_space, u, v, A)
                  
     #Set up Noise
     np.random.seed(simparams.noise_seed)
@@ -2033,14 +2032,13 @@ def simulate(params, simparams, logger):
            'resolve_output_' + str(params.save) + \
            "/general/" + params.save + '_signal')
 
-    d = R(exp(I) + Ip) + n
+    d = R(exp(I) + Ip)
     
     
     # reset imsize settings for requested parameters
     s_space = rg_space(params.imsize, naxes=2, dist = params.cellsize, \
         zerocenter=True)
-    R = r.response(s_space, sym=False, imp=True, target=d_space, \
-                       para=[u,v,A,False])
+    R = r.response(s_space, d_space, u, v, A)
     
     # dirty image for comparison
     di = R.adjoint_times(d) * s_space.vol[0] * s_space.vol[1]
@@ -2052,7 +2050,7 @@ def simulate(params, simparams, logger):
         save_results(di,"dirty image",'resolve_output_' + str(params.save) +\
             "/general/" + params.save + "_di")
     
-    return d, N, R, di, d_space, s_space
+    return d, N, R, di, d_space, s_space, exp(I), n
 
 
 def parse_input_file(infile):
