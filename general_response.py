@@ -27,6 +27,8 @@ class response(operator):
     """
     """
 
+    def __init__(self,j,S,M,rho0):
+
     def _multiply(self, expI):
         """
         """
