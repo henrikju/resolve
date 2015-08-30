@@ -48,13 +48,13 @@ class response(operator):
         N = domain.dim(split = True)
         temp = np.zeros(N)
         #volume factor for real delta peak
-        temp[N[0]/2, N[1]/2] = 1. #/ domain.vol.prod()
+        temp[N[0]/2, N[1]/2] = 1. /  domain.vol.prod()
         self.normR = np.max(self.times(temp))
     
         #calclate correct flux normalization Rd; 'psf peak = 1'
         self.normRd = 1.
         temp = np.ones(target.dim(),dtype=np.complex128)
-        self.normRd = np.max(self.adjoint_times(temp))
+        self.normRd = np.max(self.adjoint_times(temp)) / domain.vol.prod()
         
         del temp
         self.normloop = False

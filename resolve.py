@@ -199,7 +199,7 @@ def resolve(ms, imsize, cellsize, algorithm = 'ln-map', init_type_s = 'dirty',\
     # data setup
     if simulating:
         d, N, R, di, d_space, s_space, expI, n = simulate(params, simparams, logger)
-        return d, N, R, di, d_space, s_space, expI, n
+        
     else:
         d, N, R, di, d_space, s_space = datasetup(params, logger)
     
@@ -389,8 +389,8 @@ def resolve(ms, imsize, cellsize, algorithm = 'ln-map', init_type_s = 'dirty',\
             
         else:
             #wide-band I/alpha-Filter
-            logger.message('This mode is not tested thorourgh.')
-            logger.message('save files of the wideband migth be misleading.')
+            logger.message('This mode is not tested thoroughly.')
+            logger.message('save files of the wideband setting might be misleading.')
             t1 = time()
             wideband_git = 0
             while(wideband_git < numparams.wb_globiter):
