@@ -2032,7 +2032,7 @@ def simulate(params, simparams, logger):
            'resolve_output_' + str(params.save) + \
            "/general/" + params.save + '_signal')
 
-    d = R(exp(I) + Ip)
+    d = R(exp(I) + Ip) + n
     
     
     # reset imsize settings for requested parameters
