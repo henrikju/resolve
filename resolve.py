@@ -1812,7 +1812,7 @@ class simparameters(object):
         if 'sigma' in kwargs:
            self.sigma = kwargs['sigma']
         else:
-           self.sigma = 1e-2
+           self.sigma = 1e-12
            
         if 'offset' in kwargs:
            self.offset = kwargs['offset']
