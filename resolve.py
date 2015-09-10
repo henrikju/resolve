@@ -212,11 +212,12 @@ def resolve(ms, imsize, cellsize, algorithm = 'ln-map', init_type_s = 'dirty',\
         try:
             # Read-in userimage, convert to Jy/px and transpose to Resolve
             userimage = read_image_from_CASA(init_type_s,numparams.zoomfactor)
-            mtemp = field(s_space, target=s_space.get_codomain(), val=userimage)
         except:
             logger.warn("Couldt not find a starting guess image at path" + init_type_s)
             logger.message("Default read in of dirty image as starting guess")
-            mtemp = field(s_space, target=s_space.get_codomain(), val=di)
+            userimage = di
+            
+        mtemp = field(s_space, target=s_space.get_codomain(), val=userimage)
             
     if params.algorithm == 'ln-map_u':   
         
