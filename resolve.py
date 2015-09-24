@@ -213,9 +213,13 @@ def resolve(ms, imsize, cellsize, algorithm = 'ln-map', init_type_s = 'dirty',\
             # Read-in userimage, convert to Jy/px and transpose to Resolve
             userimage = read_image_from_CASA(init_type_s,numparams.zoomfactor)
         except:
-            logger.warn("Could not find a starting guess image at path" + init_type_s)
-            logger.message("Default read in of dirty image as starting guess")
-            userimage = di
+            logger.warn("Could not find a CASA image at path" + init_type_s)
+            logger.message("Trial read-in as .npy-file")
+            try:
+                userimage = np.load(init_type_s)
+            except:
+                logger.message("No .npy-file existing. Default read-in of dirty image as starting guess")
+                userimage = di
             
         mtemp = field(s_space, target=s_space.get_codomain(), val=userimage)
             
