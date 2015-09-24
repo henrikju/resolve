@@ -306,7 +306,7 @@ def resolve(ms, imsize, cellsize, algorithm = 'ln-map', init_type_s = 'dirty',\
         pspec = np.array((1+kindex)**-2 * numparams.p0)    
     # constant power spectrum guess 
     elif params.init_type_p == 'constant':
-        pspec = numparams.p0
+        pspec = np.ones(len(kindex)) * numparams.p0
     # power spectrum from last iteration 
     else:
         logger.message('using last p-iteration from previous run.')
