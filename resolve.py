@@ -328,10 +328,10 @@ def resolve(ms, imsize, cellsize, algorithm = 'ln-map', init_type_s = 'dirty',\
  
     # diagnostic plot of m starting guess
     if params.save:
-        save_results(np.exp(m_I.val),"TI exp(Starting guess)",\
+        save_results(exp(m_I.val),"TI exp(Starting guess)",\
             'resolve_output_' + str(params.save) + '/m_reconstructions/' +\
             params.save + "_expm0", rho0 = rho0)
-        write_output_to_fits(np.transpose(np.exp(m_I.val)*rho0),params, \
+        write_output_to_fits(np.transpose(exp(m_I.val)*rho0),params, \
             notifier='0', mode='I')
         if freq == 'wideband':
            save_results(m_a.val,"Alpha Starting guess",\
@@ -340,16 +340,16 @@ def resolve(ms, imsize, cellsize, algorithm = 'ln-map', init_type_s = 'dirty',\
            write_output_to_fits(np.transpose(m_I.val),params, notifier='0', \
                mode='a') 
         if params.algorithm == 'ln-map_u':
-            save_results(np.exp(u_I.val),"TI exp(Starting guess)",\
+            save_results(exp(u_I.val),"TI exp(Starting guess)",\
                 'resolve_output_' + str(params.save) + '/u_reconstructions/' +\
                 params.save + "_expu0", rho0 = rho0)    
-            write_output_to_fits(np.transpose(np.exp(u_I.val)*rho0),params, \
+            write_output_to_fits(np.transpose(exp(u_I.val)*rho0),params, \
                 notifier='0', mode='I_u')       
                 
-            save_results(np.exp(m_I.val)+np.exp(u_I.val),"TI exp(Starting guess)",\
+            save_results(exp(m_I.val)+exp(u_I.val),"TI exp(Starting guess)",\
                 'resolve_output_' + str(params.save) + '/mu_reconstructions/' +\
                 params.save + "_expmu0", rho0 = rho0)    
-            write_output_to_fits(np.transpose(np.exp(m_I.val)+np.exp(u_I.val)*rho0),params, \
+            write_output_to_fits(np.transpose(exp(m_I.val)+exp(u_I.val)*rho0),params, \
                 notifier='0', mode='I_mu')                       
     # Begin: Start Filter *****************************************************
 
@@ -407,7 +407,7 @@ def resolve(ms, imsize, cellsize, algorithm = 'ln-map', init_type_s = 'dirty',\
 
                 #a-Filter                                                                                                                                                                              
                 m_a, p_a, = mapfilter_a(d, m_a, pspec_a, N, R, logger, rho0,\
-                k_space, params, numparams, np.log(np.exp(m_I)+np.exp(u_I)), wideband_git)
+                k_space, params, numparams, np.log(exp(m_I)+exp(u_I)), wideband_git)
 
 
                 wideband_git += 1
@@ -435,10 +435,10 @@ def resolve(ms, imsize, cellsize, algorithm = 'ln-map', init_type_s = 'dirty',\
 
     if params.save:
         
-        save_results(np.exp(m_I.val),"exp(Solution m)",\
+        save_results(exp(m_I.val),"exp(Solution m)",\
             'resolve_output_' + str(params.save) + '/m_reconstructions/' + \
             params.save + "_expmfinal", rho0 = rho0)
-        write_output_to_fits(np.transpose(np.exp(m_I.val)*rho0),params, notifier='final',mode='I')
+        write_output_to_fits(np.transpose(exp(m_I.val)*rho0),params, notifier='final',mode='I')
         
         if params.freq == 'wideband':
             save_results(m_a.val,"Solution a",\
@@ -1912,7 +1912,7 @@ def callbackfunc(x, i):
         
         if gsave:
            pl.figure()
-           pl.imshow(convert_RES_to_CASA(np.exp(x)))
+           pl.imshow(convert_RES_to_CASA(exp(x)))
            pl.colorbar()
            pl.title('Iteration' + str(i))
            pl.savefig('resolve_output_' + str(gsave)+ \
@@ -1927,7 +1927,7 @@ def callbackfunc_u(x, i):
         
         if gsave:
            pl.figure()
-           pl.imshow(convert_CASA_to_RES(np.exp(x)))
+           pl.imshow(convert_CASA_to_RES(exp(x)))
            pl.colorbar()
            pl.title('Iteration' + str(i)+'_u')
            pl.savefig("resolve_output_"+ str(gsave)+"/last_iterations/iteration"+str(i)+"_expu")
@@ -1940,7 +1940,7 @@ def callbackfunc_m(x, i):
         
         if gsave:
            pl.figure()
-           pl.imshow(convert_CASA_to_RES(np.exp(x)))
+           pl.imshow(convert_CASA_to_RES(exp(x)))
            pl.colorbar()
            pl.title('Iteration' + str(i)+'_m')
            pl.savefig("resolve_output_"+ str(gsave)+"/last_iterations/iteration"+str(i)+"_expm")
@@ -2029,12 +2029,12 @@ def simulate(params, simparams, logger):
     np.random.seed()  
     
     #plot Signal to noise
-    sig = R(field(s_space, val = np.exp(I) + Ip))
+    sig = R(field(s_space, val = exp(I) + Ip))
     if params.save:
         save_results(abs(sig.val) / abs(n.val),'Signal to noise', \
            'resolve_output_' + str(params.save) + \
            "/general/" + params.save + '_StoN',log ='semilog')
-        save_results(np.exp(I) + Ip,'Signal', \
+        save_results(exp(I) + Ip,'Signal', \
            'resolve_output_' + str(params.save) + \
            "/general/" + params.save + '_signal')
 
