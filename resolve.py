@@ -327,8 +327,9 @@ def resolve(ms, imsize, cellsize, algorithm = 'ln-map', init_type_s = 'dirty',\
     # check validity of starting pspec guesses
     if np.any(pspec) == 0:
         pspec[pspec==0] = 1e-25
-    if np.any(pspec_a) == 0:
-        pspec_a[pspec_a==0] = 1e-25
+    if freq == 'wideband':
+        if np.any(pspec_a) == 0:
+            pspec_a[pspec_a==0] = 1e-25
  
     # diagnostic plot of m starting guess
     if params.save:
