@@ -311,15 +311,20 @@ def resolve(ms, imsize, cellsize, algorithm = 'ln-map', init_type_s = 'dirty',\
     if freq == 'wideband':
         # default simple k^2 spectrum with free monopole
         if params.init_type_p_a == 'k^2':
-            pspec = np.array((1+kindex)**-2 * numparams.p0_a)    
+            pspec_a = np.array((1+kindex)**-2 * numparams.p0_a)    
         # constant power spectrum guess 
         elif params.init_type_p_a == 'constant':
-            pspec = numparams.p0_a
+            pspec_a = numparams.p0_a
         # power spectrum from last iteration 
         else:
             logger.message('using last p-iteration from previous run.')
-            pspec = np.load(params.init_type_p_a)
+            pspec_a = np.load(params.init_type_p_a)
 
+    # check validity of starting pspec guesses
+    if np.any(pspec) == 0:
+        pspec[pspec==0] = 1e-25
+    if np.any(pspec_a) == 0:
+        pspec_a[pspec_a==0] = 1e-25
  
     # diagnostic plot of m starting guess
     if params.save:
