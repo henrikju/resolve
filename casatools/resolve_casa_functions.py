@@ -20,6 +20,30 @@ along with RESOLVE. If not, see <http://www.gnu.org/licenses/>.
 
 """
 
+import numpy as np
+import casa_IO as ca
+
+
+#------------------------CASA-MS-I/O wrapper-----------------------------------
+
+def read_data_withCASA(ms,save=None):
+    
+    vis, sigma, u, v, freq, nchan, nspw, nvis, summary = \
+        ca.read_data_from_ms(msfn, viscol="DATA", noisecol='SIGMA', mode='tot',\
+        noise_est = False)
+
+    if save:
+        np.save(save+'_vis',vis)
+        np.save(save+'_sigma',sigma)
+        np.save(save+'_u',u)
+        np.save(save+'_v',v)
+        np.save(save+'_freq',freq)
+        np.save(save+'_nchan',nchan)
+        np.save(save+'_nspw',nspw)
+        np.save(save+'_sum',summary)
+        
+    return vis, sigma, u, v, freq, nchan, nspw, nvis, summary
+
 #------------------------single utility functions------------------------------
 
 
