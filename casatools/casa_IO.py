@@ -3,7 +3,8 @@ general_IO.py
 Written by Henrik Junklewitz
 
 General_IO.py is an optional part of the RESOLVE package and provides CASA 
-specific reading routines for measuremnet sets.
+specific reading routines for measuremnet sets. All functions can only be run
+in a CASA environment.
 
 
 Copyright 2014 Henrik Junklewitz
@@ -19,9 +20,9 @@ You should have received a copy of the GNU General Public License
 along with RESOLVE. If not, see <http://www.gnu.org/licenses/>.
 """
 
-from casa import ms
+#from casa import ms
 import numpy as np
-import Messenger as M
+from .. import Messenger as M
 
 C = 299792458
 PI = 3.14159265358979323846
@@ -213,9 +214,101 @@ def read_data_from_ms(msfn, viscol="DATA", noisecol='SIGMA',
 
     if mode == 'pol':
 	  
-	  return Qvis, Qsigma, Uvis, Usigma, freq, lamb, u, v, nchan, nspw, nvis
+	  return Qvis, Qsigma, Uvis, Usigma, freq, lamb, u, v, nchan, nspw, \
+           summary
 
+def write_data_to_ms(msname, vis, u = None, v = None, weights = None, \
+    freq=False, mode='tot'):
+        
+        
+    """
+    Function that writes simulated data, and/or uv-coverages to a measurement
+    file. The function only works in a very limited fashion, i.e. it can only
+    write data/u/v files to an existing ms-set of the exact same size as the
+    arrays to be saved.
+    ATTENTION: MS NEEDS to be in correlation mode I,Q,U,V for this routine to
+    work!
+    
+    Args:
+        msname: name of MS to write to.
+        vis: for mode='tot' a Stokes I numpy array
+             for mode='pol' a list [Q,U]
+             for mode='full' a list [I,Q,U]
+        freq: False for full wideband data writing.
+              [spw,chan] for writing only specific frequencies. 
+    """
+    
+    m = M.Messenger(2)
 
+    if mode == 'pol':
+        m.header2("Writing polarization data to the MeasurementSet...")
+    if mode == 'tot':
+        m.header2("Writing total intensity data to the MeasurementSet...")
+    if mode == 'full':
+        m.header2("Writing I,Q,U data to the MeasurementSet...")
+    
+    try:
+        ms.open(msname,nomodify=False)
+    except IOError:
+        raise IOError('No Measurement Set with the given name')
+        
+    if np.any(vis):
+        if freq:
+            ms.selectinit(datadescid=freq[0])
+            fullvis = ms.getdata('data')
+            if mode == 'tot':
+                fullvis['data'][0,freq[1]] = vis
+                ms.putdata(fullvis)
+            if mode == 'pol':
+                fullvis['data'][1,freq[1]] = vis[0]
+                fullvis['data'][2,freq[1]] = vis[1]
+                ms.putdata(fullvis)
+            if mode == 'full':
+                fullvis['data'][0,freq[1]] = vis[0]
+                fullvis['data'][1,freq[1]] = vis[1]
+                fullvis['data'][2,freq[1]] = vis[2]
+                ms.putdata(fullvis)
+        else:
+            fullvis = ms.getdata('data')
+            if mode == 'tot':
+                fullvis['data'][0] = vis
+                ms.putdata(fullvis)
+            if mode == 'pol':
+                fullvis['data'][1] = vis[0]
+                fullvis['data'][2] = vis[1]
+                ms.putdata(fullvis)
+            if mode == 'full':
+                fullvis['data'][0] = vis[0]
+                fullvis['data'][1] = vis[1]
+                fullvis['data'][2] = vis[2]
+                ms.putdata(fullvis)
+                
+    if u or v or weights:
+        m.warning("u,v or weights writing not implemented yet")
+        
+    ms.close()
+    m.header2("...done.")
+        
+            
+        
+    
+def simulate_ms_file(modelimage, msname, instrumentmodel):
+    """
+    Routine that uses a model file defined as outlined on the webpage
+    https://casaguides.nrao.edu/index.php/Antenna_List to produce a 
+    ms-set of a fictious instrument with the specified uv-coverage. Note that
+    properly defining the instrument model file takes some work. Note also that
+    there are a lot more parameters available for simobserve, check the task
+    description for details.
+    
+    Args:
+        modelimage: string holding the path of the sky model casa image.
+        msname: string output prefix.
+        instrumentmodel: instrument model file for the fictious interferometer. 
+    """
+
+    simobserve(project=msname,skymodel=modelimage,antennalist=instrumentmodel)
+    
 def computenoise(vis,datacolumn,m,minsamp=10,):
 
 ## estimate weights by inverse variance of visibilities in

@@ -20,6 +20,7 @@ along with RESOLVE. If not, see <http://www.gnu.org/licenses/>.
 
 """                      
 
+import numpy as np
 
 def convert_CASA_to_RES(imagearray_fromCASA):
     """
@@ -132,6 +133,24 @@ def save_results(value,title,fname,log = None,value2 = None, \
         np.save(fname,convert_RES_to_CASA(value) * rho0)
     else:
         np.save(fname,value)
+
+def load_numpy_data(msfn, logger):
+    
+    try:
+        vis = np.load(msfn + '_vis.npy')
+        sigma = np.load(msfn + '_sigma.npy')
+        u = np.load(msfn + '_u.npy')
+        v = np.load(msfn + '_v.npy')
+        freqs = np.load(msfn + '_freqs.npy')
+        nchan = np.load(msfn + '_nchan.npy')    
+        nspw = np.load(msfn + '_nspw.npy')
+        u = np.load(msfn + '_u.npy')
+        summary = np.load(msfn + '_summary.npy')
+    except IOError:
+        logger.failure('No numpy file exists in the working directory with '\
+            + 'the suffix' + msfn)
+
+    return vis, sigma, u, v, freqs, nchan, nspw, summary
 
 #*******************************************************************************
 # Define truncatd exp and log functions for nifty fields to avoid NANs*********

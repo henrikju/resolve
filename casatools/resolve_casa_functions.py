@@ -22,35 +22,64 @@ along with RESOLVE. If not, see <http://www.gnu.org/licenses/>.
 
 import numpy as np
 import casa_IO as ca
-
+import scipy.ndimage.interpolation as sci
+from casa import ms as mst
+from casa import image as ia
+from .. import utility_functions as utils 
+import casa
+import argparse
 
 #------------------------CASA-MS-I/O wrapper-----------------------------------
 
-def read_data_withCASA(ms,save=None):
-    
-    vis, sigma, u, v, freq, nchan, nspw, nvis, summary = \
-        ca.read_data_from_ms(msfn, viscol="DATA", noisecol='SIGMA', mode='tot',\
-        noise_est = False)
-
-    if save:
-        np.save(save+'_vis',vis)
-        np.save(save+'_sigma',sigma)
-        np.save(save+'_u',u)
-        np.save(save+'_v',v)
-        np.save(save+'_freq',freq)
-        np.save(save+'_nchan',nchan)
-        np.save(save+'_nspw',nspw)
-        np.save(save+'_sum',summary)
+def read_data_withCASA(ms, viscol="DATA", noisecol='SIGMA', \
+    mode='tot', noise_est = False, save=None):
         
-    return vis, sigma, u, v, freq, nchan, nspw, nvis, summary
+    if mode == 'tot':
+        
+        vis, sigma, u, v, freq, nchan, nspw, nvis, summary = \
+            ca.read_data_from_ms(ms, viscol=viscol, noisecol=noisecol, \
+            mode=mode, noise_est = noise_est)
+        
+        if save:
+            np.save('../'+save+'_vis',vis)
+            np.save('../'save+'_sigma',sigma)
+            np.save('../'save+'_u',u)
+            np.save('../'save+'_v',v)
+            np.save('../'save+'_freq',freq)
+            np.save('../'save+'_nchan',nchan)
+            np.save('../'save+'_nspw',nspw)
+            np.save('../'save+'_sum',summary)
+        
+        return vis, sigma, u, v, freq, nchan, nspw, nvis, summary
+            
+    elif mode == 'pol':
+        
+        Qvis, Qsigma, Uvis, Usigma, freq, lamb, u, v, nchan, nspw, summary = \
+        ca.read_data_from_ms(ms, viscol=viscol, noisecol=noisecol, \
+            mode=mode, noise_est = noise_est)
+        
+        if save:
+            np.save(save+'_Qvis',Qvis)
+            np.save(save+'_Uvis',Uvis)
+            np.save(save+'_Qsigma',Qsigma)
+            np.save(save+'_Usigma',Usigma)
+            np.save(save+'_u',u)
+            np.save(save+'_v',v)
+            np.save(save+'_freq',freq)
+            np.save(save+'_nchan',nchan)
+            np.save(save+'_nspw',nspw)
+            np.save(save+'_sum',summary)
+        
+        return Qvis, Uvis, Qsigma, Usigma, u, v, freq, nchan, nspw, nvis, \
+            summary
 
 #------------------------single utility functions------------------------------
 
 
-def make_dirtyimage(params, logger):
+def make_dirtyimage(ms, cellsize, imsize, save):
 
-    casa.clean(vis = params.ms,imagename = 'di',cell = \
-        str(params.cellsize) + 'rad', imsize = params.imsize, \
+    casa.clean(vis = ms,imagename = 'di',cell = \
+        str(cellsize) + 'rad', imsize = imsize, \
         niter = 0, mode='mfs')
 
     ia.open('di.image')
@@ -73,9 +102,11 @@ def make_dirtyimage(params, logger):
     call(["rm", "-rf", "di.psf"])
     call(["rm", "-rf", "di.flux"])
     call(["rm", "-rf", "di.residual"])
-
     
-    return convert_CASA_to_RES(di)
+    np.save('../resolve_output_'+str(save)+'/general/di.npy',\
+        utils.convert_CASA_to_RES(di))
+
+
 
 def read_image_from_CASA(casaimagename,zoomfactor):
 
@@ -95,4 +126,32 @@ def read_image_from_CASA(casaimagename,zoomfactor):
     
     image = sci.zoom(image,zoom=zoomfactor)
     
-    return convert_CASA_to_RES(image)
+    np.save(casaimagename+'.npy',utils.convert_CASA_to_RES(image))
+    
+    
+if __name__ == 'main':
+    
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-ms","--read_ms", type=list,\
+                        help="read ms file")
+    parser.add_argument("-im","--read_im", type=list,\
+                        help="reads image from CASA format into npy format")
+    parser.add_argument("-di","--make_di", type=list,\
+                        help="make dirty image with CASA")                    
+    args = parser.parse_args()
+    
+    if np.any(args.read_ms):
+        
+        read_data_withCASA(args.read_ms[0], viscol=args.read_ms[1], \
+            noisecol=args.read_ms[1], mode=args.read_ms[2], \
+            noise_est = args.read_ms[3], save=args.read_ms[4])
+            
+    if np.any(args.read_im):
+        
+        read_image_from_CASA(args.read_im[0],args.read_im[1])
+        
+    if np.any(args.make_di):
+        
+        make_dirtyimage(args.make_di[0],args.make_di[1],args.make_di[2],\
+            args.make_di[3])
+        
