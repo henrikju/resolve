@@ -21,6 +21,34 @@ along with RESOLVE. If not, see <http://www.gnu.org/licenses/>.
 """                      
 
 import numpy as np
+from nifty import *
+from scipy.optimize import fmin_l_bfgs_b
+
+
+def BFGS_ham(x0,j, S, M, rho0,params,xdomain):
+    args = (j, S, M, rho0,params)
+    x = field(xdomain,val=x0)
+    en = energy(args)
+    return en.H(x)
+
+def BFGS_grad(x0,j, S, M, rho0,params,xdomain):
+    args = (j, S, M, rho0,params)
+    x = field(xdomain,val=x0)
+    en = energy(args)
+    return en.gradH(x).val.flatten() * xdomain.vol.prod()
+
+
+def BFGS(x0,j,S,M,rho0,params,limii=10):
+
+    if params.algorithm == 'ln-map':
+
+        res = fmin_l_bfgs_b(BFGS_ham,(x0).val.flatten(),fprime=BFGS_grad,\
+            args=(j,S,M,rho0,params,x0.domain),pgtol=1.e-10,factr=10,\
+            maxiter=limii,callback=callbackbfgs)[0]
+
+        return field(x0.domain,target=x0.target,val=res)
+    else:
+        print 'WARNING, BFGS only available yet for standard resolve'
 
 def convert_CASA_to_RES(imagearray_fromCASA):
     """
@@ -132,7 +160,7 @@ def save_results(value,title,fname,log = None,value2 = None, \
     if len(np.shape(value)) > 1:
         np.save(fname,convert_RES_to_CASA(value) * rho0)
     else:
-        np.save(fname,value)
+        np.save(fname,value2)
 
 def load_numpy_data(msfn, logger):
     

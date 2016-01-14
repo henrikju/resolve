@@ -308,8 +308,10 @@ def simulate_ms_file(modelimage, msname, instrumentmodel):
     """
 
     simobserve(project=msname,skymodel=modelimage,antennalist=instrumentmodel)
-    
+
 def computenoise(vis,datacolumn,m,minsamp=10,):
+    
+def computenoise_martin(vis,datacolumn,m,minsamp=10,):
 
 ## estimate weights by inverse variance of visibilities in
 ## each baseline and spw, ## using all times

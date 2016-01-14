@@ -9,12 +9,16 @@ def simulate(params, simparams, logger):
     """
 
     logger.header2("Simulating signal and data using provided UV-coverage.")
-
-    u,v = read_data_from_ms(params.ms)[2:4]
+    
+    # Assumes uv-coverage to be accesible via numpy arrays
+    u = np.load(msfn + '_u.npy')
+    v = np.load(msfn + '_v.npy')
 
     # wide-band imaging
     if params.freq == 'wideband':
-        logger.message('Wideband simulation not yet implemented')
+        logger.failure('Wideband simulation not yet implemented')
+        raise NotImplementedError
+        
     # single-band imaging
     else:
         nspw,chan = params.freq[0], params.freq[1]
@@ -55,22 +59,22 @@ def simulate(params, simparams, logger):
         Ip.shape = (simparams.simpix,simparams.simpix)
         np.random.seed()          
    
-    if params.save:      
-        save_results(exp(I),'simulated extended signal','resolve_output_' + \
-            str(params.save) + "/general/" + params.save + '_expsimI')
-        if simparams.compact:
-            save_results(Ip,'simulated compact signal','resolve_output_' + \
-                str(params.save) + "/general/" + params.save + '_expsimIp')
-    
-    if params.save:
-        # maximum k-mode and resolution of data
-        uvrange = np.array([np.sqrt(u[i]**2 + v[i]**2) for i in range(len(u))])
-        dx_real_rad = (np.max(uvrange))**-1
-        logger.message('resolution\n' + 'rad ' + str(dx_real_rad) + '\n' + \
-            'asec ' + str(dx_real_rad/asec2rad))
 
-        save_results(u,'UV','resolve_output_' + str(params.save) + \
-            "/general/" +  params.save + "_uvcov", plotpar='o', value2 = v)
+    save_results(exp(I),'simulated extended signal','resolve_output_' + \
+        str(params.save) + "/general/" + params.save + '_expsimI')
+    if simparams.compact:
+        save_results(Ip,'simulated compact signal','resolve_output_' + \
+            str(params.save) + "/general/" + params.save + '_expsimIp')
+    
+
+    # maximum k-mode and resolution of data
+    uvrange = np.array([np.sqrt(u[i]**2 + v[i]**2) for i in range(len(u))])
+    dx_real_rad = (np.max(uvrange))**-1
+    logger.message('resolution\n' + 'rad ' + str(dx_real_rad) + '\n' + \
+        'asec ' + str(dx_real_rad/asec2rad))
+
+    save_results(u,'UV','resolve_output_' + str(params.save) + \
+        "/general/" +  params.save + "_uvcov", plotpar='o', value2 = v)
 
     # noise
     N = diagonal_operator(domain=d_space, diag=simparams.sigma**2)
@@ -87,17 +91,16 @@ def simulate(params, simparams, logger):
     
     #plot Signal to noise
     sig = R(field(s_space, val = exp(I) + Ip))
-    if params.save:
-        save_results(abs(sig.val) / abs(n.val),'Signal to noise', \
-           'resolve_output_' + str(params.save) + \
-           "/general/" + params.save + '_StoN',log ='semilog')
-        save_results(exp(I) + Ip,'Signal', \
-           'resolve_output_' + str(params.save) + \
-           "/general/" + params.save + '_signal')
+
+    save_results(abs(sig.val) / abs(n.val),'Signal to noise', \
+       'resolve_output_' + str(params.save) + \
+       "/general/" + params.save + '_StoN',log ='semilog')
+    save_results(exp(I) + Ip,'Signal', \
+       'resolve_output_' + str(params.save) + \
+       "/general/" + params.save + '_signal')
 
     d = R(exp(I) + Ip) + n
-    
-    
+        
     # reset imsize settings for requested parameters
     s_space = rg_space(params.imsize, naxes=2, dist = params.cellsize, \
         zerocenter=True)
