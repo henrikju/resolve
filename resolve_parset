@@ -3,30 +3,33 @@ ms
 imsize
 cellsize
 algorithm 'ln-map'
-init_type_s 'dirty'
-use_init_s False       
-init_type_s_u 'dirty'
-use_init_s_u False 
+stokes 'I'
+ftmode = 'gfft'
+init_type_s 'const'      
+init_type_s_u 'const'
 init_type_p 'k-2_mon'
-init_type_p_a 'k-2'
-lastit None
+init_type_a_p 'k-2'
 freq [0,0]
+rho0 1
 pbeam None
 uncertainty False
-noise_est None
-map_algo 'sd'
-pspec_algo 'cg'
-barea 1
+simulating = False
+noise_est False
+noise_update False
 map_conv 1e-1
 pspec_conv 1e-1
-save None
 callback 3
-plot False
-simulating False
-restfreq [0,0]
-viscol 'data'
+reffreq [0,0]
+pspec = True
+pspec_a = True
+uncertainty_a = False
+
 
 %numerical parameters
+final_convlevel 4
+viscol 'data'
+map_algo 'sd'
+pspec_algo 'cg'
 m_start 0.1
 m_a_start 0.1
 u_start 0.1

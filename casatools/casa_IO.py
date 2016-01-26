@@ -20,9 +20,13 @@ You should have received a copy of the GNU General Public License
 along with RESOLVE. If not, see <http://www.gnu.org/licenses/>.
 """
 
-#from casa import ms
+#VERY unelegnat quick fix
+import sys
+sys.path.append('../')
+
+from casa import ms
 import numpy as np
-from .. import Messenger as M
+import Messenger as M
 
 C = 299792458
 PI = 3.14159265358979323846
@@ -310,6 +314,8 @@ def simulate_ms_file(modelimage, msname, instrumentmodel):
     simobserve(project=msname,skymodel=modelimage,antennalist=instrumentmodel)
 
 def computenoise(vis,datacolumn,m,minsamp=10,):
+    
+    return None
     
 def computenoise_martin(vis,datacolumn,m,minsamp=10,):
 

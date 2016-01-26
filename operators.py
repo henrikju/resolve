@@ -20,6 +20,8 @@ along with RESOLVE. If not, see <http://www.gnu.org/licenses/>.
 
 """
 
+from nifty import *
+
 #-------------------------single band operators--------------------------------
 
 class N_operator(operator):
@@ -103,12 +105,12 @@ class D_operator(operator):
         numparams = self.para[7]
         params = self.para[6]
 
-        if params.pspec_algo == 'cg':
+        if numparams.pspec_algo == 'cg':
             x_,convergence = nt.conjugate_gradient(self._matvec, x, \
                 note=True)(tol=numparams.pspec_tol,clevel=numparams.pspec_clevel,\
                 limii=numparams.pspec_iter)
                 
-        elif params.pspec_algo == 'sd':
+        elif numparams.pspec_algo == 'sd':
             x_,convergence = nt.steepest_descent(self._matvec, x, \
                 note=True)(tol=numparams.pspec_tol,clevel=numparams.pspec_clevel,\
                 limii=numparams.pspec_iter)
@@ -302,12 +304,12 @@ class Da_operator(operator):
         numparams = self.para[9]
         params = self.para[8]
 
-        if params.pspec_algo == 'cg':
+        if numparams.pspec_algo == 'cg':
             x_,convergence = nt.conjugate_gradient(self._matvec, x, \
                 note=True)(tol=numparams.pspec_tol_a,clevel=numparams.pspec_clevel_a,\
                 limii=numparams.pspec_iter_a)
                 
-        elif params.pspec_algo == 'sd':
+        elif numparams.pspec_algo == 'sd':
             x_,convergence = nt.steepest_descent(self._matvec, x, \
                 note=True)(tol=numparams.pspec_tol_a,clevel=numparams.pspec_clevel_a,\
                 limii=numparams.pspec_iter_a)

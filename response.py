@@ -215,7 +215,7 @@ class response_mfs(operator):
 
         if mode == 'wsclean':
             #self.wscOP = wscOP
-            print 'Wideband-wsclean mode not yet implementet'
+            raise NotImplementedError('WSclean mfs support not yet available')
 
         else:
             #see below for explanation
@@ -239,10 +239,10 @@ class response_mfs(operator):
                     #Now save settings to make the DFT/IDFT "artificially" adjoint for nifty. Note
                     #that the natural adjointness of the FT is broken for a direct FT on irregular
                     #grids. There ought to be a more elegant way...
-                    self.adjointfactor[i,j] = abs(tempd.dot(Rtemp.times(tempim)))\
-                        / Rtemp.adjoint_times(tempd).dot(tempim)
+                    self.adjointfactor[i,j] = abs(tempd.dot(Rfreq.times(tempim)))\
+                        / Rfreq.adjoint_times(tempd).dot(tempim)
 
-            del Rtemp
+            del Rfreq
             del tempim
             del tempd
 
@@ -253,17 +253,17 @@ class response_mfs(operator):
         dx = self.domain.dist()[0] 
         Nx = self.domain.dim(split = True)[0]
         dy = self.domain.dist()[1] 
-        Ny = self.domain.dim(split = True)[1}
+        Ny = self.domain.dim(split = True)[1]
         
         if self.mode == 'gfft':
             visval = np.array([])
             for i in range(self.nspw):
                 for j in range(self.nchan):
-                    temp = (self.A[i,j] * exp_I * exp(-log(self.freq[i,j]/self.freq[self.restspw,self.restchan])*a))
+                    temp = (self.A[i,j] * exp_I * exp(-log(self.freq[i,j]/self.freq[self.refspw,self.refchan])*a))
                     
                 
                     temp = gf.gfft(temp, in_ax = [(dx, Nx), \
-                        (dy, Ny)], out_ax = [u[i,j],v[i,j]], ftmachine = 'fft', \
+                        (dy, Ny)], out_ax = [self.u[i,j],self.v[i,j]], ftmachine = 'fft', \
                         in_zero_center = True, out_zero_center = True, \
                         enforce_hermitian_symmetry = True, W = 6, alpha=1.5 , \
                         verbose=False)
@@ -295,7 +295,7 @@ class response_mfs(operator):
         dy = self.domain.dist()[1] 
         Ny = self.domain.dim(split = True)[1]
         d_space = x.domain
-        
+
         if mode == 'normal':        
         
             exp_I = np.zeros((Nx,Ny))
@@ -312,14 +312,14 @@ class response_mfs(operator):
                             verbose=False)
             
                     #flux normalization
-                    expI /=  self.normRd[i,j]
+                    exp_I /=  self.normRd[i,j]
 
                     #fft normalization due to gridding routines. The factor 4 should be correct
                     #for W=6 and alpha=1.5. Anything left should be taken care of by
                     #the blind normalization.
-                    expI = expI *Nx *Ny / self.target.num() / 4. * self.adjointfactor[i,j]
+                    exp_I = exp_I *Nx *Ny / self.target.num() / 4. * self.adjointfactor[i,j]
 
-                    exp_I += self.A[i,j] * gridvis * exp(-log(self.freq[i,j]/self.freq[self.restspw,self.restchan])\
+                    exp_I += self.A[i,j] * gridvis * exp(-log(self.freq[i,j]/self.freq[self.refspw,self.refchan])\
                             *a)
                             
             
@@ -331,7 +331,7 @@ class response_mfs(operator):
         
             exp_I = np.zeros((Nx,Ny))
             
-            vispoint = x.val.reshape(nspw,nchan,nvis)
+            vispoint = x.val.reshape(self.nspw,self.nchan,self.nvis)
             
             for i in range(self.nspw):
                 for j in range(self.nchan):
@@ -343,16 +343,16 @@ class response_mfs(operator):
                             verbose=False)
 
                     #flux normalization
-                    expI /=  self.normRd[i,j]
+                    exp_I /=  self.normRd[i,j]
 
                     #fft normalization due to gridding routines. The factor 4 should be correct
                     #for W=6 and alpha=1.5. Anything left should be taken care of by
                     #the blind normalization.
-                    expI = expI *Nx *Ny / self.target.num() / 4. * self.adjointfactor[i,j]
+                    exp_I = exp_I *Nx *Ny / self.target.num() / 4. * self.adjointfactor[i,j]
                     
                     exp_I += self.A[i,j] * gridvis * exp(-log(self.freq[i,j]/\
-                        self.freq[self.restspw,self.restchan])*a) * \
-                        (-log(self.freq[i,j]/self.freq[self.restspw,self.restchan]))
+                        self.freq[self.refspw,self.refchan])*a) * \
+                        (-log(self.freq[i,j]/self.freq[self.refspw,self.refchan]))
                 
             
             expI = field(domain = self.domain, val = exp_I)
@@ -364,7 +364,7 @@ class response_mfs(operator):
         
             exp_I = np.zeros((Nx,Ny))
             
-            vispoint = x.val.reshape(nspw,nchan,nvis)
+            vispoint = x.val.reshape(self.nspw,self.nchan,self.nvis)
             
             for i in range(self.nspw):
                 for j in range(self.nchan):
@@ -376,15 +376,15 @@ class response_mfs(operator):
                             verbose=False)
 
                     #flux normalization
-                    expI /=  self.normRd[i,j]
+                    exp_I /=  self.normRd[i,j]
 
                     #fft normalization due to gridding routines. The factor 4 should be correct
                     #for W=6 and alpha=1.5. Anything left should be taken care of by
                     #the blind normalization.
-                    expI = expI *Nx *Ny / self.target.num() / 4. * self.adjointfactor[i,j]
+                    exp_I = exp_I *Nx *Ny / self.target.num() / 4. * self.adjointfactor[i,j]
 
-                    exp_I += self.A[i,j] * gridvis * exp(-log(self.freq[i,j]/self.freq[self.restspw,self.restchan])\
-                            *a) * (-log(self.freq[i,j]/self.freq[self.restspw,self.restchan]))**2
+                    exp_I += self.A[i,j] * gridvis * exp(-log(self.freq[i,j]/self.freq[self.refspw,self.refchan])\
+                            *a) * (-log(self.freq[i,j]/self.freq[self.refspw,self.refchan]))**2
                 
             
             expI = field(domain = self.domain, val = exp_I)

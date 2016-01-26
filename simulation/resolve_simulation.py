@@ -1,6 +1,10 @@
+#VERY unelegnat quick fix
+import sys
+sys.path.append('../')
+
 from nifty import *
 import numpy as np
-from .. import utility_functions as uf 
+import utility_functions as utils 
 
 
 def simulate(params, simparams, logger):
@@ -124,28 +128,27 @@ class simparameters(object):
     simulating-mode.
     """      
     
-    def __init__(self, params, parset):
+    def __init__(self, params):
           
-        self.check_default(simpix,100)
-        self.check_default(signal_seed,454810740)
-        self.check_default(noise_seed,3127312)
-        self.check_default(p0_sim,9.7e-18)
-        self.check_default(k0,19099) 
-        self.check_default(sigalpha,2)  
-        self.check_default(sigma,1e-12)
-        self.check_default(offset,0)   
-        self.check_default(compact,False)
+        parset = params.parset  
+        self.check_default('simpix', parset, 100)
+        self.check_default('signal_seed', parset, 454810740)
+        self.check_default('noise_seed', parset, 3127312)
+        self.check_default('p0_sim, parset', parset, 9.7e-18)
+        self.check_default('k0', parset, 19099) 
+        self.check_default('sigalpha', parset, 2)  
+        self.check_default('sigma', parset, 1e-12)
+        self.check_default('offset', parset, 0)   
+        self.check_default('compact', parset, False)
         
         if self.compact:
             
-            self.check_default(nsources,50)
-            self.check_default(pfactor,5) 
-
-
+            self.check_default('nsources', parset, 50)
+            self.check_default('pfactor', parset, 5) 
 
     def check_default(self, parameter, parset, default):
         
-        if str(parameter) in parset:
-            self.parameter = parset[str(parameter)]
+        if parameter in parset:
+            setattr(self, parameter, parset[str(parameter)])
         else:
-            self.parameter = default
+            setattr(self, parameter, default)

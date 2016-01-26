@@ -4,7 +4,7 @@ Written by Henrik Junklewitz
 
 resolve_casa_functions.py is an auxiliary file for resolve.py and belongs to 
 the RESOLVE package. It provides all the functions that need explicit CASA 
-input.
+input and currently cannot be used from a python interpreter.
 
 RESOLVE is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -20,14 +20,20 @@ along with RESOLVE. If not, see <http://www.gnu.org/licenses/>.
 
 """
 
+#VERY unelegnat quick fix
+import sys
+sys.path.append('../')
+
+
 import numpy as np
 import casa_IO as ca
 import scipy.ndimage.interpolation as sci
-from casa import ms as mst
 from casa import image as ia
-from .. import utility_functions as utils 
 import casa
-import argparse
+
+import utility_functions as utils
+
+
 
 #------------------------CASA-MS-I/O wrapper-----------------------------------
 
@@ -36,19 +42,22 @@ def read_data_withCASA(ms, viscol="DATA", noisecol='SIGMA', \
         
     if mode == 'tot':
         
+        print 'B'
+        
         vis, sigma, u, v, freq, nchan, nspw, nvis, summary = \
             ca.read_data_from_ms(ms, viscol=viscol, noisecol=noisecol, \
             mode=mode, noise_est = noise_est)
         
         if save:
             np.save('../'+save+'_vis',vis)
-            np.save('../'save+'_sigma',sigma)
-            np.save('../'save+'_u',u)
-            np.save('../'save+'_v',v)
-            np.save('../'save+'_freq',freq)
-            np.save('../'save+'_nchan',nchan)
-            np.save('../'save+'_nspw',nspw)
-            np.save('../'save+'_sum',summary)
+            np.save('../'+save+'_sigma',sigma)
+            np.save('../'+save+'_u',u)
+            np.save('../'+save+'_v',v)
+            np.save('../'+save+'_freq',freq)
+            np.save('../'+save+'_nchan',nchan)
+            np.save('../'+save+'_nspw',nspw)
+            np.save('../'+save+'_sum',summary)
+            np.save('../'+save+'_nvis',nvis)
         
         return vis, sigma, u, v, freq, nchan, nspw, nvis, summary
             
@@ -128,30 +137,4 @@ def read_image_from_CASA(casaimagename,zoomfactor):
     
     np.save(casaimagename+'.npy',utils.convert_CASA_to_RES(image))
     
-    
-if __name__ == 'main':
-    
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-ms","--read_ms", type=list,\
-                        help="read ms file")
-    parser.add_argument("-im","--read_im", type=list,\
-                        help="reads image from CASA format into npy format")
-    parser.add_argument("-di","--make_di", type=list,\
-                        help="make dirty image with CASA")                    
-    args = parser.parse_args()
-    
-    if np.any(args.read_ms):
-        
-        read_data_withCASA(args.read_ms[0], viscol=args.read_ms[1], \
-            noisecol=args.read_ms[1], mode=args.read_ms[2], \
-            noise_est = args.read_ms[3], save=args.read_ms[4])
-            
-    if np.any(args.read_im):
-        
-        read_image_from_CASA(args.read_im[0],args.read_im[1])
-        
-    if np.any(args.make_di):
-        
-        make_dirtyimage(args.make_di[0],args.make_di[1],args.make_di[2],\
-            args.make_di[3])
         

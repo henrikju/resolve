@@ -23,7 +23,11 @@ along with RESOLVE. If not, see <http://www.gnu.org/licenses/>.
 import numpy as np
 from nifty import *
 from scipy.optimize import fmin_l_bfgs_b
+from operators import *
 
+# solve howto transfer global variable
+gcallback = 3
+gsave = 'testsave'
 
 def BFGS_ham(x0,j, S, M, rho0,params,xdomain):
     args = (j, S, M, rho0,params)
@@ -76,7 +80,7 @@ def convert_RES_to_CASA(imagearray_fromRES,FITS=False):
 def callbackfunc(x, i):
     
     if i%gcallback == 0:
-        print 'Callback at iteration' + str(i)
+        print ' Callback at iteration' + str(i)
         
         if gsave:
            pl.figure()
@@ -87,6 +91,7 @@ def callbackfunc(x, i):
                "/last_iterations/" + 'iteration'+str(i))
            np.save('resolve_output_' + str(gsave)+ \
                "/last_iterations/" + 'iteration' + str(i),x)
+           pl.close()
                
 def callbackfunc_u(x, i):
     
@@ -113,6 +118,11 @@ def callbackfunc_m(x, i):
            pl.title('Iteration' + str(i)+'_m')
            pl.savefig("resolve_output_"+ str(gsave)+"/last_iterations/iteration"+str(i)+"_expm")
            np.save("resolve_output_"+ str(gsave)+"/last_iterations/iteration"+str(i)+"_expm",x)
+
+def callbackbfgs(x):
+
+    print x
+    np.save("resolve_output_"+ str(gsave)+"/last_iterations/iteration"+"_lbfgs",exp(x))
 
 def save_results(value,title,fname,log = None,value2 = None, \
     value3= None, plotpar = None, rho0 = 1., twoplot=False):
@@ -169,16 +179,17 @@ def load_numpy_data(msfn, logger):
         sigma = np.load(msfn + '_sigma.npy')
         u = np.load(msfn + '_u.npy')
         v = np.load(msfn + '_v.npy')
-        freqs = np.load(msfn + '_freqs.npy')
+        freqs = np.load(msfn + '_freq.npy')
         nchan = np.load(msfn + '_nchan.npy')    
         nspw = np.load(msfn + '_nspw.npy')
-        u = np.load(msfn + '_u.npy')
-        summary = np.load(msfn + '_summary.npy')
+        summary = np.load(msfn + '_sum.npy')
+        nvis = np.load(msfn + '_nvis.npy')
+
     except IOError:
         logger.failure('No numpy file exists in the working directory with '\
-            + 'the suffix' + msfn)
+            + 'the suffix ' + msfn)
 
-    return vis, sigma, u, v, freqs, nchan, nspw, summary
+    return vis, sigma, u, v, freqs, nchan, nspw, nvis, summary
 
 #*******************************************************************************
 # Define truncatd exp and log functions for nifty fields to avoid NANs*********
