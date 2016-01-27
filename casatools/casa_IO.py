@@ -58,13 +58,12 @@ def read_data_from_ms(msfn, viscol="DATA", noisecol='SIGMA',
     if mode == 'tot':
         m.header2("Reading total intensity data from the MeasurementSet...")
     
-    
     viscol = viscol.lower()
     noisecol = noisecol.lower()
 
-    if noise_est:
+    if noise_est == 'old':
         m.message("Performing simple noise estimate")
-        computenoise(msfn,viscol,m,minsamp=10)
+        computenoise_martin(msfn,viscol,m,minsamp=10)
 
     ms.open(msfn)
     meta = ms.metadata()
@@ -125,101 +124,295 @@ def read_data_from_ms(msfn, viscol="DATA", noisecol='SIGMA',
 
     print corr_announce
 
-    
-    for spw in nspw:
-	  nchan.append(meta.nchan(spw))
-          
-	  ms.selectinit(datadescid=spw)
-	  temp = ms.getdata([viscol,"axis_info"],ifraxis=False)
-	  data_temp = temp[viscol]
-	  info_temp = temp["axis_info"]
-	  s_temp = ms.getdata(["sigma"], ifraxis=False)['sigma']
-	  flags = 1. - ms.getdata(["flag"])['flag']
+    if noise_est != 'full':
+        for spw in nspw:
+            nchan.append(meta.nchan(spw))
+      
+            ms.selectinit(datadescid=spw)
+            temp = ms.getdata([viscol,"axis_info"],ifraxis=False)
+            data_temp = temp[viscol]
+            info_temp = temp["axis_info"]
+            if noisecol == 'weight_spectrum':
+                raise NotImplementedError('Weight_spectrum loadnot implemented yet.')
+            else:
+	        s_temp = ms.getdata(['sigma'],\
+                    ifraxis=False)['sigma']
+            flags = 1. - ms.getdata(["flag"])['flag']
 
-          if not(np.sum(flags[0])==np.sum(flags[1])==np.sum(flags[2])==np.sum(flags[3])):
-              m.warn('Warning: Different flags for different correlations/channels.'+
-            'Hard flag is applied: If any correlation is flagged, this gets'+ 
-            'extended to all.')
-              maximum = np.ones(np.shape(flags[0]))
-              for i in range(4):
-                  if flags[i].sum() < maximum.sum():
-                      maximum = flags[i]
-              flag = maximum
-          else:
-              flag = flags[0]      
+            if not(np.sum(flags[0])==np.sum(flags[1])\
+               ==np.sum(flags[2])== np .sum(flags[3])):
+               m.warn('Warning: Different flags for' \
+               +'different correlations/channels.'\
+               +'Hard flag is applied: If any '\
+               +'correlation is flagged, this gets'\
+               +'extended to all.')
+               maximum = np.ones(np.shape(flags[0]))
+               for i in range(4):
+                   if flags[i].sum() < maximum.sum():
+                       maximum = flags[i]
+                       flag = maximum
+            else:
+                flag = flags[0]      
 
-          #Start reading data.
+            #Start reading data.
 
-          if mode == 'tot': 
-              vis_temp = flag * (Spart[0] * data_temp[0] + Spart[1] * data_temp[1] + Spart[2] *\
-                        data_temp[2] + Spart[3] * data_temp[3])
-              sigma_temp = flag * (Spart[0] * s_temp[0] + Spart[1] * s_temp[1] + Spart[2] * s_temp[2] +\
-                        Spart[3] * s_temp[3])
+            if mode == 'tot': 
+                vis_temp = flag * (Spart[0] * data_temp[0]\
+                    + Spart[1] * data_temp[1] + Spart[2] *\
+                    data_temp[2] + Spart[3] * data_temp[3])
+                sigma_temp = flag * (Spart[0] * s_temp[0]\
+                    + Spart[1] * s_temp[1] + Spart[2] *\
+                    + s_temp[2] + Spart[3] * s_temp[3])
 
-              vis.append(vis_temp)
-              sigma.append(sigma_temp)
+                vis.append(vis_temp)
+                sigma.append(sigma_temp)
 
-              nvis.append(len(vis_temp[0]))
+                nvis.append(len(vis_temp[0]))
 
 
-          if mode == 'pol':
-              Qvis_temp = flag * (QSpart[0] * data_temp[0] + QSpart[1] * data_temp[1] + QSpart[2] *\
-                         data_temp[2] + QSpart[3] * data_temp[3])
-              Qsigma_temp = flag * (QSpart[0] * s_temp[0] + QSpart[1] * s_temp[1] + QSpart[2] * s_temp[2] +\
-                         QSpart[3] * s_temp[3])
+            if mode == 'pol':
+                Qvis_temp = flag * (QSpart[0] *\
+                    data_temp[0] + QSpart[1] *\
+		         data_temp[1]+QSpart[2] *data_temp[2]\
+		         + QSpart[3] * data_temp[3])
+                Qsigma_temp = flag * (QSpart[0] *\
+                    s_temp[0] + QSpart[1] * s_temp[1]+\
+                    QSpart[2] * s_temp[2] +\
+                    QSpart[3] * s_temp[3])
 
-              Qvis.append(Qvis_temp)
-              Qsigma.append(Qsigma_temp)
-         
-              Uvis_temp = flag * (USpart[0] * data_temp[0] + USpart[1] * data_temp[1] + USpart[2] *\
-                         data_temp[2] + USpart[3] * data_temp[3])
-              Usigma_temp = flag * (USpart[0] * s_temp[0] + USpart[1] * s_temp[1] + USpart[2] * s_temp[2] +\
-                         USpart[3] * s_temp[3])
+                Qvis.append(Qvis_temp)
+                Qsigma.append(Qsigma_temp)
+     
+                Uvis_temp = flag * (USpart[0] * data_temp[0] + USpart[1]\
+                    * data_temp[1] + USpart[2] *\
+                    data_temp[2] + USpart[3] * data_temp[3])
+                Usigma_temp = flag * (USpart[0] * s_temp[0] + USpart[1] * \
+                    s_temp[1] + USpart[2] * s_temp[2] +\
+                    USpart[3] * s_temp[3])
 
-              Uvis.append(Uvis_temp)
-              Usigma.append(Usigma_temp)
+                Uvis.append(Uvis_temp)
+                Usigma.append(Usigma_temp)
 
-              
-              nvis.append(len(Uvis_temp[0]))
+                nvis.append(len(Uvis_temp[0]))
 
-       
-          #uvflat give all uv coordinates for the chosen spw in m
-          uflat = ms.getdata(['u'])['u']
-          vflat = ms.getdata(['v'])['v']
+   
+            #uvflat give all uv coordinates for the chosen 
+            #spw in m
+            uflat = ms.getdata(['u'])['u']
+            vflat = ms.getdata(['v'])['v']
 
-          freqtemp = info_temp["freq_axis"]["chan_freq"]
-          freq.append(freqtemp)
-          lamb = C / freqtemp
-          if mode == 'pol':
-              lambs2.append(lamb**2 / PI)
+            freqtemp = info_temp["freq_axis"]["chan_freq"]
+            freq.append(freqtemp)
+            lamb = C / freqtemp
+            if mode == 'pol':
+                lambs2.append(lamb**2 / PI)
 
-         
-
-          #calculates uv coordinates per channel in #lambda 
-          utemp = np.array([uflat/k for k in lamb])
-          vtemp = np.array([vflat/k for k in lamb])
+            #calculates uv coordinates per channel in 
+            #lambda 
+            utemp = np.array([uflat/k for k in lamb])
+            vtemp = np.array([vflat/k for k in lamb])
  
-          #Reads the uv coordates into lists. Delete functions take care of flags.
-          u.append(utemp)
-          v.append(vtemp)
+            #Reads the uv coordates into lists. Delete 
+            #functions take care of flags.
+            u.append(utemp)
+            v.append(vtemp)
+
+        try:
+            summary = ms.summary()
+        except:
+            print "Warning: Could not create a summary"
+            summary = None        
     
-    try:
-        summary = ms.summary()
-    except:
-        print "Warning: Could not create a summary"
-        summary = None        
-        
-    ms.close()
+        ms.close()
 
-    if mode =='tot':
+        if mode =='tot':
 
-	  return vis, sigma, u, v, freq, nchan, nspw, nvis, summary
+            return vis, sigma, u, v, freq, nchan, nspw,\
+                nvis, summary
 
 
-    if mode == 'pol':
+        if mode == 'pol':
 	  
-	  return Qvis, Qsigma, Uvis, Usigma, freq, lamb, u, v, nchan, nspw, \
-           summary
+            return Qvis, Qsigma, Uvis, Usigma, freq, lamb,\
+                u, v, nchan, nspw, summary
+        
+    else:
+        
+        for spw in nspw:
+            nchan.append(meta.nchan(spw))
+            if mode == 'tot':
+                visspw = []
+                sigmaspw = []
+            if mode == 'pol':
+	        Uvisspw = []
+	        Qvisspw = []
+	        Usigmaspw = []
+	        Qsigmaspw = []
+            ants = meta.antennaids()
+            for ant1 in ants:
+                for ant2 in ants:
+                    if ant1 != ant2:
+		        ms.selectinit(datadescid=spw)
+		        ms.select({'antenna1':[ant1],\
+                            'antenna2':[ant2]})
+                        temp = ms.getdata([viscol,\
+                            "axis_info"], ifraxis=False)
+			if not temp:
+			    continue
+                        data_temp = temp[viscol]
+                        info_temp = temp["axis_info"]
+                        if noisecol == 'weight_spectrum':
+                            raise NotImplementedError(\
+                            'Weight_spectrum'\
+                            +' load not implemented yet.')
+                        else:
+	                    s_val = np.std(np.abs(data_temp[:,int(\
+                               np.shape(data_temp)[1]/2.)]-\
+                               data_temp[:,int(np.shape(data_temp)[1]/2.)+1]))
+			    s_temp=np.ones(np.shape(data_temp))*s_val
+                        flags = 1. - ms.getdata(["flag"])\
+                            ['flag']
+
+                        if not(np.sum(flags[0])==\
+                            np.sum(flags[1])==np.sum\
+                            (flags[2]) == np.sum\
+                            (flags[3])):
+                            m.warn('Warning: Different'\
+                                +' flags for different'\
+	                        +' correlations/channels.'\
+                                +' Hard flag is applied:'\
+                                +' If any correlation'\
+	                        +' is flagged, this gets'\
+                                +'extended to all.')
+                            maximum =\
+                                np.ones(np.shape(flags[0]))
+                            for i in range(4):
+                                if flags[i].sum() <\
+                                    maximum.sum():
+                                    maximum = flags[i]
+                                flag = maximum
+                        else:
+                            flag = flags[0]      
+
+                        #Start reading data.
+
+                        if mode == 'tot': 
+                            vis_temp = flag * (Spart[0] *\
+                                data_temp[0] + Spart[1] *\
+		                data_temp[1] + Spart[2] *\
+                                data_temp[2] + Spart[3] *\
+                                data_temp[3])
+                            sigma_temp = flag * (Spart[0]*\
+                                s_temp[0] + Spart[1] *\
+		                s_temp[1] + Spart[2] *\
+                                s_temp[2] + Spart[3] *\
+                                s_temp[3])
+
+                            visspw.append(vis_temp)
+                            sigmaspw.append(sigma_temp)
+
+            
+
+
+                        if mode == 'pol':
+                            Qvis_temp = flag * (QSpart[0] *\
+                                data_temp[0] + QSpart[1] *\
+		                data_temp[1]+QSpart[2] *\
+		                data_temp[2]+ QSpart[3] *\
+		                data_temp[3])
+                            Qsigma_temp = flag *\
+                                (QSpart[0]*s_temp[0] +\
+		                QSpart[1] * s_temp[1] +\
+                                QSpart[2] * s_temp[2] +\
+                                QSpart[3] * s_temp[3])
+
+                            Qvisspw.append(Qvis_temp)
+                            Qsigmaspw.append(Qsigma_temp)
+     
+                            Uvis_temp = flag * (USpart[0] *\
+                                data_temp[0] + USpart[1] *\
+		                data_temp[1]+USpart[2] *\
+		                data_temp[2]+ USpart[3] *\
+		                data_temp[3])
+                            Usigma_temp = flag *\
+                                (USpart[0]*s_temp[0] +\
+		                USpart[1] * s_temp[1] +\
+                                USpart[2] * s_temp[2] +\
+                                USpart[3] * s_temp[3])
+
+                            Uvisspw.append(Uvis_temp)
+                            Usigmaspw.append(Usigma_temp)
+            
+            if mode == 'tot':
+	        nvis.append(len(visspw[0]))
+	        visspw = np.swapaxes(visspw,0,1)
+                visspw = visspw.reshape((np.shape(visspw)[0],-1))
+		sigmaspw = np.swapaxes(sigmaspw,0,1)
+                sigmaspw = sigmaspw.reshape((np.shape(sigmaspw)[0],-1))
+	        vis.append(visspw)
+	        sigma.append(sigmaspw)
+	    if mode == 'pol':
+	        Qvisspw = np.swapaxes(Qvisspw,0,1)\
+                    .reshape((Qvisspw.shape[0],Qvisspw.shape[1],-1))
+		Qsigmaspw = np.swapaxes(Qsigmaspw,0,1)\
+                    .reshape((Qsigmaspw.shape[0],Qsigmaspw.shape[1],-1))
+		Uvisspw = np.swapaxes(Uvisspw,0,1)\
+                    .reshape((Uvisspw.shape[0],Uvisspw.shape[1],-1))
+		Usigmaspw = np.swapaxes(Usigmaspw,0,1)\
+                    .reshape((Usigmaspw.shape[0],Usigmaspw.shape[1],-1))
+                nvis.append(len(Uvisspw[0]))
+                Qvis.append(Qvisspw)
+                Uvis.append(Uvisspw)
+                Qsigma.append(Qsigmaspw)
+                Usigma.append(Usigmaspw)
+   
+            ms.selectinit(datadescid=spw)
+            
+            #uvflat give all uv coordinates for 
+            #the chosen spw in m
+            uflat = ms.getdata(['u'])['u']
+            vflat = ms.getdata(['v'])['v']
+
+            freqtemp =info_temp["freq_axis"]\
+	        ["chan_freq"]
+            freq.append(freqtemp)
+            lamb = C / freqtemp
+            if mode == 'pol':
+                lambs2.append(lamb**2 / PI)
+
+            #calculates uv coordinates per 
+            #channel in lambda 
+            utemp = np.array([uflat/k for k in lamb])
+            vtemp = np.array([vflat/k for k in lamb])
+ 
+            #Reads the uv coordates into lists. 
+            #Delete functions due to flags 
+
+            u.append(utemp)
+            v.append(vtemp)
+                        
+
+        try:
+            summary = ms.summary()
+        except:
+            print "Warning: Could not create a summary"
+            summary = None        
+    
+        ms.close()
+
+        if mode =='tot':
+
+            if noise_est == 'full':
+                sigma[sigma==0.] = np.median(sigma)
+            return vis, sigma, u, v, freq, nchan, nspw,\
+                nvis, summary
+
+
+        if mode == 'pol':
+	  
+            return Qvis, Qsigma, Uvis, Usigma, freq, lamb,\
+                u, v, nchan, nspw, summary
+  
 
 def write_data_to_ms(msname, vis, u = None, v = None, weights = None, \
     freq=False, mode='tot'):
@@ -313,9 +506,20 @@ def simulate_ms_file(modelimage, msname, instrumentmodel):
 
     simobserve(project=msname,skymodel=modelimage,antennalist=instrumentmodel)
 
-def computenoise(vis,datacolumn,m,minsamp=10,):
+def computenoise(meta, nspw):
     
-    return None
+    ants = meta.antennaids()
+
+    # loop over al baselines    
+    for ant1 in ants:
+        for ant2 in ants:
+            if ant1 != ant2:
+                ms.select({'antenna1':[ant1],'antenna2':[ant2]})
+                for spw in nspw:
+                    ms.selectinit(datadescid=spw)
+                    vistemp = ms.getdata('data')['data']
+                    sigma = np.std(np.abs(vistemp[0,29]-vistemp[0,30]))
+                
     
 def computenoise_martin(vis,datacolumn,m,minsamp=10,):
 
