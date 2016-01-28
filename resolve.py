@@ -33,6 +33,9 @@ import csv
 print '\nModule loading information:'
 
 #import necessary standard scientific modules
+import matplotlib as mpl
+mpl.use('Agg')
+import matplotlib.pyplot as plt
 import pylab as pl
 import numpy as np
 from nifty import *
@@ -63,6 +66,8 @@ except ImportError:
 q = 1e-15
 C = 299792458
 asec2rad = 4.84813681e-6
+gsave = ''
+gcallback = 3
 
 def resolve(params, numparams):
 
@@ -148,7 +153,7 @@ def resolve(params, numparams):
     about.warnings.off()
     
     # Make sure to not interactively plot. Produces a mess.
-    pl.ioff()    
+    pl.ioff()  
     
     # Define simulation parameter class if needed
     if params.simulating:
@@ -200,6 +205,7 @@ def resolve(params, numparams):
     
     
     # Data setup
+    print params.simulating
     if params.simulating:
         d, N, R, di, d_space, s_space, expI, n = simulate(params, simparams, \
             logger)
@@ -551,8 +557,8 @@ def datasetup(params, logger):
         if params.pbeam:
             try:
                 logger.message('Attempting to load primary beam from'\
-                + 'file' + str(params.pbeam) +'.npy')
-                A = np.load(params.pbeam+'.npy')
+                + 'file' + str(params.pbeam))
+                A = np.load(params.pbeam)
             except IOError:
                 logger.warn('Could not find primary beam file. Set pb to 1.')
                 A = np.array([[np.ones((int(params.imsize),int(params.imsize)))\
@@ -637,8 +643,8 @@ def datasetup(params, logger):
         if params.pbeam:
             try:
                 logger.message('Attempting to load primary beam from'\
-                + 'file' + str(params.pbeam) +'.npy')
-                A = np.load(params.pbeam+'.npy')
+                + ' file' + str(params.pbeam))
+                A = np.load(params.pbeam)
             except IOError:
                 logger.warn('Could not find primary beam file. Set pb to 1.')
                 A = 1.
@@ -1776,14 +1782,14 @@ class parameters(object):
         self.check_default('init_type_u', parset, 'const',dtype=str)
         self.check_default('rho0', parset, 1, dtype = str)
         if not self.rho0 == 'from_sg':
-            self.rho0 = int(self.rho0) 
+            self.rho0 = float(self.rho0) 
         self.check_default('freq', parset, [0,0], dtype = str)
         if self.freq != 'wideband':
             self.freq = np.array(self.freq.split(),dtype=int)
         self.check_default('pspec', parset, True, dtype = bool)
         self.check_default('pbeam', parset, False,dtype=str)
         self.check_default('uncertainty', parset, '', dtype = str)
-        self.check_default('simulating', parset, False, dtype = bool)
+        self.check_default('simulating', parset, '', dtype = bool)
         if self.simulating:
             self.parset = parset
         self.check_default('noise_est', parset, False, dtype = str)
@@ -1809,6 +1815,7 @@ class parameters(object):
         global gsave
         gcallback = self.callback
         gsave = self.save
+        utils.update_globvars()
         
     def check_default(self, parameter, parset, default, dtype=str):
         

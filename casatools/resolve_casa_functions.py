@@ -116,8 +116,17 @@ def make_dirtyimage(ms, cellsize, imsize, save):
         utils.convert_CASA_to_RES(di))
 
 
+def read_pbeam_from_CASA(pbeamimagename, outn):
+    
+    ia.open(pbeamimagename)
+    imageinfo = ia.summary(pbeamimagename)
+    pbeam = ia.getchunk().reshape(imageinfo['shape'][0],imageinfo['shape'][1])
+    
+    ia.close()
+    
+    np.save(outn,pbeam)
 
-def read_image_from_CASA(casaimagename,zoomfactor):
+def read_image_from_CASA(casaimagename,zoomfactor, outn):
 
     ia.open(casaimagename)
     imageinfo = ia.summary(casaimagename)
@@ -134,7 +143,7 @@ def read_image_from_CASA(casaimagename,zoomfactor):
     ia.close()
     
     image = sci.zoom(image,zoom=zoomfactor)
-    
-    np.save(casaimagename+'.npy',utils.convert_CASA_to_RES(image))
+    np.save(outn,utils.convert_CASA_to_RES(image))
+
     
         

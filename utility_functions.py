@@ -19,15 +19,18 @@ You should have received a copy of the GNU General Public License
 along with RESOLVE. If not, see <http://www.gnu.org/licenses/>.
 
 """                      
-
+import matplotlib as mpl
+mpl.use('Agg')
+import matplotlib.pyplot as plt
+import pylab as pl
 import numpy as np
 from nifty import *
 from scipy.optimize import fmin_l_bfgs_b
 from operators import *
+import resolve as rs
 
 # solve howto transfer global variable
-gcallback = 3
-gsave = 'testsave'
+
 
 def BFGS_ham(x0,j, S, M, rho0,params,xdomain):
     args = (j, S, M, rho0,params)
@@ -190,7 +193,14 @@ def load_numpy_data(msfn, logger):
             + 'the suffix ' + msfn)
 
     return vis, sigma, u, v, freqs, nchan, nspw, nvis, summary
-
+    
+def update_globvars():
+    reload(rs)
+    global gsave
+    global gcallback
+    gsave = rs.gsave
+    gcallback = rs.gcallback
+    
 #*******************************************************************************
 # Define truncatd exp and log functions for nifty fields to avoid NANs*********
 
