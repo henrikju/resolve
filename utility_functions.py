@@ -29,8 +29,6 @@ from scipy.optimize import fmin_l_bfgs_b
 from operators import *
 import resolve as rs
 
-# solve howto transfer global variable
-
 
 def BFGS_ham(x0,j, S, M, rho0,params,xdomain):
     args = (j, S, M, rho0,params)
