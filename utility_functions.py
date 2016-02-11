@@ -62,7 +62,8 @@ def convert_CASA_to_RES(imagearray_fromCASA):
     """
     #with resepect to CASA, the imagearray is already rotated by 90 degrees
     #clockwise because of 0-point-shift between CASAIM/FITS and python.
-    return np.rot90(np.transpose(imagearray_fromCASA),-1)
+    return np.transpose(np.rot90(imagearray_fromCASA,1))
+    #return imagearray_fromCASA
     
 def convert_RES_to_CASA(imagearray_fromRES,FITS=False):
     """
@@ -76,7 +77,8 @@ def convert_RES_to_CASA(imagearray_fromRES,FITS=False):
     #For direct comparison, all matplotlib images are correctly changed to
     #reflect the original CASA output
     else:
-        return np.transpose(np.rot90(imagearray_fromRES,-1))
+        return np.rot90(np.transpose(imagearray_fromRES),-1)
+        #return imagearray_fromRES
 
 def callbackfunc(x, i):
     
@@ -192,12 +194,14 @@ def load_numpy_data(msfn, logger):
 
     return vis, sigma, u, v, freqs, nchan, nspw, nvis, summary
     
-def update_globvars():
-    reload(rs)
+def update_globvars(gsavein, gcallbackin):
+
     global gsave
     global gcallback
-    gsave = rs.gsave
-    gcallback = rs.gcallback
+    gsave = gsavein
+    gcallback = gcallbackin
+
+
     
 #*******************************************************************************
 # Define truncatd exp and log functions for nifty fields to avoid NANs*********

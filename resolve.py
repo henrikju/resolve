@@ -46,6 +46,7 @@ import pyfits
 #import RESOLVE-package modules
 import utility_functions as utils
 import simulation.resolve_simulation as sim
+import response_approximation.UV_algorithm as ra
 from operators import *
 import response as r
 import Messenger as M
@@ -186,6 +187,11 @@ def resolve(params, numparams):
         '/D_reconstructions'):
             os.makedirs('resolve_output_' + str(params.save)+\
             '/D_reconstructions')
+    if params.init_type_s == 'fastResolve':
+       if not os.path.exists('resolve_output_' + str(params.save)+\
+        '/fastresolve'):
+            os.makedirs('resolve_output_' + str(params.save)+\
+            '/fastresolve') 
 
     # Set up message logger            
     logfile = 'resolve_output_'+str(params.save)+'/general/' + params.save + \
@@ -205,26 +211,30 @@ def resolve(params, numparams):
     
     
     # Data setup
-    print params.simulating
     if params.simulating:
         d, N, R, di, d_space, s_space, expI, n = simulate(params, simparams, \
             logger)
         
     else:
         d, N, R, di, d_space, s_space = datasetup(params, logger)
-
-    # Starting guesses setup
-    if ((params.algorithm == ('ln-map') or params.algorithm == ('wf')) and (params.freq != 'wideband')):
-        m_s, pspec, params, k_space = starting_guess_setup(params, logger, s_space, d_space)
         
-    elif ((params.algorithm == 'ln-map_u') and (params.freq != 'wideband')):
-        m_s, pspec, m_u, params, k_space = starting_guess_setup(params, logger, s_space, d_space)
-
-    elif (params.algorithm == 'ln-map') and (params.freq == 'wideband'):
-        m_s, pspec, m_a, pspec_a, params, k_space = starting_guess_setup(params, logger, s_space, d_space)
-
-    elif (params.algorithm == 'ln-map_u') and (params.freq == 'wideband'):
-        m_s, pspec, m_u, m_a, pspec_a, params, k_space = starting_guess_setup(params, logger, s_space, d_space)        
+    # Check whether to do FastResolve for the starting guess, only for ln-map
+    if params.init_type_s == 'fastResolve':
+        m_s, pspec, k_space = ra.fastresolve(R, d, numparams.SNR_assumed, s_space, 'resolve_output_'+params.save+'/fastresolve/', do_point=False)
+    
+    else:
+        # Starting guesses setup
+        if ((params.algorithm == ('ln-map') or params.algorithm == ('wf')) and (params.freq != 'wideband')):
+            m_s, pspec, params, k_space = starting_guess_setup(params, logger, s_space, d_space)
+            
+        elif ((params.algorithm == 'ln-map_u') and (params.freq != 'wideband')):
+            m_s, pspec, m_u, params, k_space = starting_guess_setup(params, logger, s_space, d_space)
+    
+        elif (params.algorithm == 'ln-map') and (params.freq == 'wideband'):
+            m_s, pspec, m_a, pspec_a, params, k_space = starting_guess_setup(params, logger, s_space, d_space)
+    
+        elif (params.algorithm == 'ln-map_u') and (params.freq == 'wideband'):
+            m_s, pspec, m_u, m_a, pspec_a, params, k_space = starting_guess_setup(params, logger, s_space, d_space)        
               
     # Begin: Start Filter *****************************************************
     
@@ -528,7 +538,11 @@ def datasetup(params, logger):
             
             variance = np.var(np.array(vis))*np.ones(np.shape(np.array(vis)))\
                 .flatten()
+        elif params.noise_est == 'SNR_assumed':
+            
+            variance = np.ones(np.shape(sigma))*np.mean(np.abs(vis*vis))/(1.+numparams.SNR_assumed)
         else:
+            
             variance = (np.array(sigma)**2).flatten()
             
         # Fix of possible problems in noise estimation
@@ -618,6 +632,9 @@ def datasetup(params, logger):
             
             variance = np.var(np.array(vis))*np.ones(np.shape(np.array(vis)))\
                 .flatten()
+        elif params.noise_est == 'SNR_assumed':
+            
+            variance = np.ones(np.shape(sigma))*np.mean(np.abs(vis*vis))/(1.+numparams.SNR_assumed)
         else:
             variance = (np.array(sigma)**2).flatten()
 
@@ -697,30 +714,17 @@ def starting_guess_setup(params, logger, s_space, d_space):
         m_s = field(s_space, target=s_space.get_codomain(), val=di)   
         
     else:
-        if params.casaload:
-            try:
-                # Read-in userimage, convert to Jy/px and transpose to Resolve
-                userimage = read_image_from_CASA(params.init_type_s,\
-                    numparams.zoomfactor)
-            except:
-                logger.warn("Could not find a CASA image at path"\
-                    + params.init_type_s)
-                logger.message("Trial read-in as .npy-file")
-                try:
-                    userimage = np.load(params.init_type_s)
-                except:
-                    logger.failure("No .npy-file existing. Default read-in of"\
-                        +"dirty image as starting guess")
-                    userimage = di
-                
-            m_s = field(s_space, target=s_space.get_codomain(), val=userimage)
+        if params.sglogim:
+            m_s = field(s_space, target=s_space.get_codomain(), \
+                val=np.load(params.init_type_s))
         else:
             m_s = field(s_space, target=s_space.get_codomain(), \
-            val=np.load(params.init_type_s))
+                val=log(np.abs(np.load(params.init_type_s))))
     
     # Optional starting guesses for m_u
             
-    if params.algorithm == 'ln-map_u':   
+    if params.algorithm == 'ln-map_u':
+        
         
         if params.init_type_u == 'const':
             m_u = field(s_space, val = numparams.m_u_start)
@@ -729,44 +733,29 @@ def starting_guess_setup(params, logger, s_space, d_space):
             m_u = field(s_space, target=s_space.get_codomain(), val=di)   
             
         else:
-            if params.casaload:
-                try:
-                    # Read-in userimage, convert to Jy/px and transpose to 
-                    # Resolve
-                    userimage = read_image_from_CASA(params.init_type_u,\
-                        numparams.zoomfactor)
-                except:
-                    logger.warn("Could not find a CASA image at path"\
-                        + params.init_type_s)
-                    logger.message("Trial read-in as .npy-file")
-                    try:
-                        userimage = np.load(params.init_type_s)
-                    except:
-                        logger.failure("No .npy-file existing. Default"\
-                        +"read-in of dirty image as starting guess")
-                        userimage = di
-                    
+            print 'this should be clear'
+            if params.sglogim_u:              
                 m_u = field(s_space, target=s_space.get_codomain(),\
-                    val=userimage)
+                    val=params.init_type_u)
             else:
                 m_u = field(s_space, target=s_space.get_codomain(), \
-                val=np.load(params.init_type_u))
+                val=log(np.abs(np.load(params.init_type_u))))
                 
     if params.rho0 == 'from_sg':
         
         if params.algorithm == 'ln-map_u':
-            params.rho0 = np.mean(m_s.val[np.where(m_s.val>=np.max(m_s.val)\
-                / 10)] + m_u.val[np.where(m_u.val>=np.max(m_u.val)/ 10)])
+            params.rho0 = np.mean(exp(m_s.val[np.where(exp(m_s).val>=np.max(exp(m_s).val)\
+                / 10)] + m_u.val[np.where(exp(m_u).val>=np.max(exp(m_u).val)/ 10)]))
         else:
-             params.rho0 = np.mean(m_s.val[np.where(m_s.val>=np.max(m_s.val)\
-                / 10)])
+             params.rho0 = np.mean(exp(m_s.val[np.where(exp(m_s).val>=np.max(exp(m_s).val)\
+                / 10)]))
         logger.message('rho0 was calculated as: ' + str(params.rho0)) 
         
     if not params.rho0 == 1.:
         
-        m_s /= params.rho0
+        m_s -= log(params.rho0)
         if params.algorithm == 'ln-map_u':
-            m_u /= params.rho0
+            m_u -= log(params.rho0)
 
     np.save('resolve_output_' + str(params.save)+'/general/rho0',params.rho0)
     if params.rho0 < 0:
@@ -822,28 +811,8 @@ def starting_guess_setup(params, logger, s_space, d_space):
             m_a = field(s_space, val = numparams.m_a_start)  
             
         else:
-            if params.casaload:
-                try:
-                    # Read-in userimage, convert to Jy/px and transpose to 
-                    # Resolve
-                    userimage = read_image_from_CASA(params.init_type_a,\
-                        numparams.zoomfactor)
-                except:
-                    logger.warn("Could not find a CASA image at path"\
-                        + params.init_type_s)
-                    logger.message("Trial read-in as .npy-file")
-                    try:
-                        userimage = np.load(params.init_type_a)
-                    except:
-                        logger.failure("No .npy-file existing. Default set "\
-                        +"of constant starting guess")
-                        userimage = numparams.m_a_start
-                    
-                m_a = field(s_space, target=s_space.get_codomain(),\
-                    val=userimage)
-            else:
-                m_a = field(s_space, target=s_space.get_codomain(), \
-                    val=np.load(params.init_type_a))        
+            m_a = field(s_space, target=s_space.get_codomain(), \
+                val=np.load(params.init_type_a))        
         
         # Spectral index pspec starting guesses
         
@@ -1745,7 +1714,91 @@ def wienerfilter(d, m, pspec, N, R, logger, k_space, params, numparams,\
 
         git += 1
 
-    return m, pspec    
+    return m, pspec
+
+def ML(d, m, pspec, N, R, logger, k_space, params, numparams,\
+    *args):
+    """
+    Maximum Likelihood estimation.
+    """
+
+    if params.freq == 'wideband':
+        logger.header1("Begin total intensity wideband Wiener Filter" \
+            + "iteration cycle.")  
+    else:
+        logger.header1("Begin total intensity standard Wiener Filter" \
+                    + "iteration cycle.")
+    
+    s_space = m.domain
+    kindex = k_space.get_power_indices()[0]
+    
+    if params.freq == 'wideband':
+        aconst = args[0]
+        wideband_git = args[1]
+        
+    # Defines important operators
+    if params.freq == 'wideband':
+        M = MI_operator(domain=s_space, sym=True, imp=True, para=[N, R, aconst])
+        j = R.adjoint_times(N.inverse_times(d), a = aconst)
+    else:    
+        M = M_operator(domain=s_space, sym=True, imp=True, para=[N, R])
+        j = R.adjoint_times(N.inverse_times(d))
+    D = D_operator(domain=s_space, sym=True, imp=True, para=[0, M, m, j, \
+        numparams.M0_start, params.rho0, params, numparams])
+
+    
+    # diagnostic plots
+
+    if params.freq == 'wideband':
+        utils.save_results(j,"j",'resolve_output_' + str(params.save) +\
+            '/general/' + params.save + \
+            str(wideband_git) + '_j',rho0 = params.rho0)
+    else:
+        utils.save_results(j,"j",'resolve_output_' + str(params.save) +\
+            '/general/' + params.save + '_j',rho0 = params.rho0)
+
+    # iteration parameters
+    git = 1
+    mlist = [m]
+    
+          
+    args = (j, 0, M, params.rho0)
+    D.para = [0, M, m, j, numparams.M0_start, params.rho0, params,\
+        numparams]
+
+    if params.uncertainty=='only':
+        logger.message('Only calculating uncertainty map as requested.')
+        D_hat = D.hat(domain=s_space,\
+            ncpu=numparams.ncpu,nrun=numparams.nrun)
+        utils.save_results(D_hat.val,"relative uncertainty", \
+            'resolve_output_' + str(params.save) +\
+            "/D_reconstructions/" + params.save + "_D")
+        return None
+
+    # run minimizer
+    logger.header2("Computing the ML estimate.\n")
+
+    m = D(j)       
+
+    # save iteration results
+    mlist.append(m)
+    if params.freq == 'wideband':
+        utils.save_results(m.val, "map, iter #" + str(git), \
+            'resolve_output_' + str(params.save) +\
+            '/m_reconstructions/' + params.save + "_m_WF" +\
+            str(wideband_git) + "_" + str(git), rho0 = params.rho0)
+        write_output_to_fits(np.transpose(m.val*params.rho0),params, \
+            notifier = str(wideband_git) + "_" + str(git),mode = 'I')
+    else:
+        utils.save_results(m.val, "map, iter #" + str(git), \
+            'resolve_output_' + str(params.save) +\
+            '/m_reconstructions/' + params.save + "_m_WF" + str(git), \
+            rho0 = params.rho0)
+        write_output_to_fits(np.transpose(m.val*params.rho0),params,\
+            notifier = str(git), mode='I')
+
+
+    return m 
         
 #-------------------parameter classes & code I/O-------------------------------
         
@@ -1790,6 +1843,9 @@ class parameters(object):
         self.check_default('pbeam', parset, False,dtype=str)
         self.check_default('uncertainty', parset, '', dtype = str)
         self.check_default('simulating', parset, '', dtype = bool)
+        self.check_default('sglogim', parset, '',dtype = bool)
+        if self.algorithm == 'ln-map_u':
+            self.check_default('sglogim_u', parset, '',dtype = bool)
         if self.simulating:
             self.parset = parset
         self.check_default('noise_est', parset, False, dtype = str)
@@ -1815,7 +1871,7 @@ class parameters(object):
         global gsave
         gcallback = self.callback
         gsave = self.save
-        utils.update_globvars()
+        utils.update_globvars(gsave, gcallback)
         
     def check_default(self, parameter, parset, default, dtype=str):
         
@@ -1848,6 +1904,8 @@ class numparameters(object):
         self.check_default('map_iter', parset, 100, dtype = float)
         self.check_default('final_convlevel', parset, 4, dtype = float)
         self.check_default('viscol', parset, 'data')
+        if params.noise_est == 'SNR_assumed':
+            self.check_default('SNR_assumed',parset,1,dtype = float)
         if params.init_type_s != ('const' or 'dirty'):
             self.check_default('zoomfactor', parset, 1, dtype = float)
         
