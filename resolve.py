@@ -488,36 +488,8 @@ def datasetup(params, logger):
 
     #Non-WSclean (i.e. standard) loading routines
     else:
-        
-        if params.casaload:
-            
-            try:
-                
-                if params.noise_est == 'full':
-                    os.system('casapy --nologger -c' \
-                    +'/casatools/resolve_casa_functions.py -ms ['\
-                    +params.ms+','+params.viscol+','+'sigma,'+'tot,'+'True]')
-                    
-                else:
-                    os.system('casapy --nologger -c' \
-                    +'/casatools/resolve_casa_functions.py -ms ['\
-                    +params.ms+','+params.viscol+','+'sigma,'+'tot,'+'False]')
-                
-                vis, sigma, u, v, freqs, nchan, nspw, nvis, params.summary = \
-                utils.load_numpy_data(params.ms, logger)
-    
-            except:
-                
-                logger.failure("Could not use CASA to directly to read in "\
-                    + "measurement set with name "+str(params.ms))
-                logger.message("Trial read-in interpreting "+str(params.ms)+\
-                    "as .npy-file suffix.")
-                params.casaload = False
-    
-        if not params.casaload:
-    
-            vis, sigma, u, v, freqs, nchan, nspw, nvis, params.summary = \
-                utils.load_numpy_data(params.ms, logger)
+        vis, sigma, u, v, freqs, nchan, nspw, nvis, params.summary = \
+            utils.load_numpy_data(params.ms, logger)
     
     # definition of wideband data operators
     if params.freq == 'wideband':
@@ -733,7 +705,6 @@ def starting_guess_setup(params, logger, s_space, d_space):
             m_u = field(s_space, target=s_space.get_codomain(), val=di)   
             
         else:
-            print 'this should be clear'
             if params.sglogim_u:              
                 m_u = field(s_space, target=s_space.get_codomain(),\
                     val=params.init_type_u)
@@ -1171,7 +1142,7 @@ def mapfilter_I_u(d, m,u, pspec, N, R, logger, k_space, params, numparams,\
 
         args = (j, S, M, params.rho0, numparams.beta, numparams.eta,m,u)
         
-        if numparams.map_algo == 'sd':
+        if (numparams.map_algo == 'sd' or numparams.map_algo == 'lbfgs'):
             en = energy_mu(args) 
                
             logger.header2("Computing the m-MAP estimate.\n")   
@@ -1190,11 +1161,11 @@ def mapfilter_I_u(d, m,u, pspec, N, R, logger, k_space, params, numparams,\
                 limii=numparams.map_iter_u)[0]
             en.ueff = u
        
-        elif numparams.map_algo == 'lbfgs':
-            logger.warn('lbfgs algorithm implemented from scipy, but'\
-                + ' experimental.')
-            logger.failure('BFGS for mu not implemented yet!')
-            raise NotImplementedError('BFGS for mu not implemented yet!')
+#        elif numparams.map_algo == 'lbfgs':
+#            logger.warn('lbfgs algorithm implemented from scipy, but'\
+#                + ' experimental.')
+#            logger.failure('BFGS for mu not implemented yet!')
+#            raise NotImplementedError('BFGS for mu not implemented yet!')
             #m = utils.BFGS(m,j,S,M,rho0,numparams.beta, numparams.etalimii=numparams.map_iter)
             #u = utils.BFGS(u,j,S,M,rho0,params,limii=numparams.map_iter_u)                  
                 
@@ -1810,7 +1781,7 @@ class parameters(object):
     values.
     """
 
-    def __init__(self, parset, save, casaload, verbosity):
+    def __init__(self, parset, save, verbosity):
 
         #mandatory parameters
         self.ms = parset['ms']
@@ -1819,7 +1790,6 @@ class parameters(object):
         
         #non-parset parameters dealing with code-system interactions
         self.save = save
-        self.casaload = casaload
         self.verbosity = verbosity
         
         #main parameters that often need to be set by the user but have default
@@ -1972,7 +1942,7 @@ class numparameters(object):
         
 
 
-def parse_input_file(parsetfn, save, casaload, verbosity):
+def parse_input_file(parsetfn, save, verbosity):
     """ parse the parameter file."""
 
     reader = csv.reader(open(parsetfn, 'rb'), delimiter=" ",
@@ -1988,7 +1958,7 @@ def parse_input_file(parsetfn, save, casaload, verbosity):
             parset[row[0]] = row[1]
 
 
-    params = parameters(parset, save, casaload, verbosity)       
+    params = parameters(parset, save, verbosity)       
     
     numparams = numparameters(params, parset)
 
@@ -2106,6 +2076,6 @@ if __name__ == "__main__":
     #this is done for greater customization and control of file parsing than
     #doing it directly with a file-type in argparse     
     params, numparams = parse_input_file(args.parsetfn, args.save, \
-        args.casaload, args.verbosity)
+        args.verbosity)
     
     resolve(params, numparams)
