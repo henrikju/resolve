@@ -120,6 +120,9 @@ def fastresolve(R, d, SNR_assumed, s_space, path, SAVE=True, do_point=False):
         if(SAVE):
             np.save(path+"point_cycle_Ipoint_final", Ipoint.val)
     
+
+    # TOTAL HOTFIX INPUT
+    m.val = np.log(np.abs(np.load('./sgs/finalimage_clean.npy')))
     for ii in xrange(40):
         aaa = ttt.time()
     

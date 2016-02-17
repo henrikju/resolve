@@ -217,13 +217,14 @@ def resolve(params, numparams):
         
     else:
         d, N, R, di, d_space, s_space = datasetup(params, logger)
-        
+    
+    # Starting guess setup    
     # Check whether to do FastResolve for the starting guess, only for ln-map
     if params.init_type_s == 'fastResolve':
         m_s, pspec, k_space = ra.fastresolve(R, d, numparams.SNR_assumed, s_space, 'resolve_output_'+params.save+'/fastresolve/', do_point=False)
     
     else:
-        # Starting guesses setup
+        # Standard Starting guesses setup
         if ((params.algorithm == ('ln-map') or params.algorithm == ('wf')) and (params.freq != 'wideband')):
             m_s, pspec, params, k_space = starting_guess_setup(params, logger, s_space, d_space)
             
@@ -488,6 +489,7 @@ def datasetup(params, logger):
 
     #Non-WSclean (i.e. standard) loading routines
     else:
+    
         vis, sigma, u, v, freqs, nchan, nspw, nvis, params.summary = \
             utils.load_numpy_data(params.ms, logger)
     
@@ -953,7 +955,7 @@ def mapfilter_I(d, m, pspec, N, R, logger, k_space, params, numparams,\
             
             # Do a "poor-man's" extended critical filter step using residual
             logger.header2("Trying simple noise estimate without any D.")
-            newvar = (np.abs((d.val - R(exp(m)))**2).mean())
+            newvar = ((d - R(exp(m)))**2).mean()
             logger.message('old variance iteration '+str(git-1)+':' + str(N.diag()))
             logger.message('new variance iteration '+str(git)+':' + str(newvar))
             np.save('resolve_output_' + str(params.save) + '/general/oldvar_'+str(git),N.diag())
@@ -1879,6 +1881,7 @@ class numparameters(object):
         if params.init_type_s != ('const' or 'dirty'):
             self.check_default('zoomfactor', parset, 1, dtype = float)
         
+        self.check_default('pspec', parset, True, dtype = bool)
         if params.pspec:
             
             self.check_default('pspec_algo', parset, 'cg')
@@ -2075,7 +2078,6 @@ if __name__ == "__main__":
     
     #this is done for greater customization and control of file parsing than
     #doing it directly with a file-type in argparse     
-    params, numparams = parse_input_file(args.parsetfn, args.save, \
-        args.verbosity)
+    params, numparams = parse_input_file(args.parsetfn, args.save, args.verbosity)
     
     resolve(params, numparams)
