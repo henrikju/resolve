@@ -5,7 +5,9 @@ sys.path.append('../')
 from nifty import *
 import numpy as np
 import utility_functions as utils 
+import response as r
 
+asec2rad = 4.84813681e-6
 
 def simulate(params, simparams, logger):
     """
@@ -13,10 +15,10 @@ def simulate(params, simparams, logger):
     """
 
     logger.header2("Simulating signal and data using provided UV-coverage.")
-    
+
     # Assumes uv-coverage to be accesible via numpy arrays
-    u = np.load(msfn + '_u.npy')
-    v = np.load(msfn + '_v.npy')
+    u = np.load(params.ms + '_u.npy')
+    v = np.load(params.ms + '_v.npy')
 
     # wide-band imaging
     if params.freq == 'wideband':
@@ -39,10 +41,9 @@ def simulate(params, simparams, logger):
     #setting up signal power spectrum
     powspec_I = [simparams.p0_sim * (1. + (k / simparams.k0) ** 2) ** \
         (-simparams.sigalpha) for k in kindex]
-    if params.save:      
-        save_results(kindex,'simulated signal PS','resolve_output_' + \
-            str(params.save) + "/general/" + params.save + '_ps_original',\
-            log = 'loglog', value2 = powspec_I)
+    utils.save_results(kindex,'simulated signal PS','resolve_output_' + \
+        str(params.save) + "/general/" + params.save + '_ps_original',\
+        log = 'loglog', value2 = powspec_I)
 
     S = power_operator(k_space, spec=powspec_I)
 
@@ -64,10 +65,10 @@ def simulate(params, simparams, logger):
         np.random.seed()          
    
 
-    save_results(exp(I),'simulated extended signal','resolve_output_' + \
+    utils.save_results(exp(I),'simulated extended signal','resolve_output_' + \
         str(params.save) + "/general/" + params.save + '_expsimI')
     if simparams.compact:
-        save_results(Ip,'simulated compact signal','resolve_output_' + \
+        utils.save_results(Ip,'simulated compact signal','resolve_output_' + \
             str(params.save) + "/general/" + params.save + '_expsimIp')
     
 
@@ -77,48 +78,47 @@ def simulate(params, simparams, logger):
     logger.message('resolution\n' + 'rad ' + str(dx_real_rad) + '\n' + \
         'asec ' + str(dx_real_rad/asec2rad))
 
-    save_results(u,'UV','resolve_output_' + str(params.save) + \
+    utils.save_results(u,'UV','resolve_output_' + str(params.save) + \
         "/general/" +  params.save + "_uvcov", plotpar='o', value2 = v)
 
-    # noise
-    N = diagonal_operator(domain=d_space, diag=simparams.sigma**2)
-    
     # response, no simulated primary beam
     A = 1.
     R = r.response(s_space, d_space, u, v, A)
+
+    # Set up Noise
+    sig = R(field(s_space, val = exp(I) + Ip))
+    SNR = simparams.SNR
+    np.random.seed(simparams.noise_seed)
+    var = abs(sig.dot(sig)) / SNR
+    logger.message('Noise variance used in simulation: ' + str(var))
+    N = diagonal_operator(domain=d_space, diag=var)
                  
     #Set up Noise
     np.random.seed(simparams.noise_seed)
     n = field(d_space, random="gau", var=N.diag(bare=True))
     # revert to unseeded randomness
     np.random.seed()  
-    
-    #plot Signal to noise
-    sig = R(field(s_space, val = exp(I) + Ip))
 
-    save_results(abs(sig.val) / abs(n.val),'Signal to noise', \
-       'resolve_output_' + str(params.save) + \
-       "/general/" + params.save + '_StoN',log ='semilog')
-    save_results(exp(I) + Ip,'Signal', \
+    # Plot and save signal
+    utils.save_results(exp(I) + Ip,'Signal', \
        'resolve_output_' + str(params.save) + \
        "/general/" + params.save + '_signal')
 
     d = R(exp(I) + Ip) + n
         
-    # reset imsize settings for requested parameters
+    # reset imsize settings for requested parameters; corrupt noise if wanted
     s_space = rg_space(params.imsize, naxes=2, dist = params.cellsize, \
         zerocenter=True)
     R = r.response(s_space, d_space, u, v, A)
+    if simparams.noise_corruption:
+        N = diagonal_operator(domain=d_space, diag=var*simparams.noise_corruption)
+        logger.message('Corrupt noise variance by factor: ' + str(simparams.noise_corruption))
     
     # dirty image for comparison
     di = R.adjoint_times(d) * s_space.vol[0] * s_space.vol[1]
-
-    # more diagnostics if requested
-    if params.save:
         
-        # plot the dirty image
-        save_results(di,"dirty image",'resolve_output_' + str(params.save) +\
-            "/general/" + params.save + "_di")
+    utils.save_results(di,"dirty image",'resolve_output_' + str(params.save) +\
+        "/general/" + params.save + "_di")
     
     return d, N, R, di, d_space, s_space, exp(I), n
     
@@ -131,24 +131,23 @@ class simparameters(object):
     def __init__(self, params):
           
         parset = params.parset  
-        self.check_default('simpix', parset, 100)
-        self.check_default('signal_seed', parset, 454810740)
-        self.check_default('noise_seed', parset, 3127312)
-        self.check_default('p0_sim, parset', parset, 9.7e-18)
-        self.check_default('k0', parset, 19099) 
-        self.check_default('sigalpha', parset, 2)  
-        self.check_default('sigma', parset, 1e-12)
-        self.check_default('offset', parset, 0)   
-        self.check_default('compact', parset, False)
-        
+        self.check_default('simpix', parset, 100, dtype = int)
+        self.check_default('signal_seed', parset, 454810740, dtype = int)
+        self.check_default('noise_seed', parset, 3127312, dtype = int)
+        self.check_default('p0_sim', parset, 9.7e-18, dtype = float)
+        self.check_default('k0', parset, 19099, dtype = float) 
+        self.check_default('sigalpha', parset, 2, dtype = float)  
+        self.check_default('SNR', parset, 1., dtype = float)
+        self.check_default('offset', parset, 0, dtype = float)   
+        self.check_default('compact', parset, False, dtype = bool)
+        self.check_default('noise_corruption', parset, 0, dtype = float)
         if self.compact:
-            
-            self.check_default('nsources', parset, 50)
-            self.check_default('pfactor', parset, 5) 
+            self.check_default('nsources', parset, 50, dtype = int)
+            self.check_default('pfactor', parset, 5, dtype = float)
+    
+    def check_default(self, parameter, parset, default, dtype=str):
 
-    def check_default(self, parameter, parset, default):
-        
         if parameter in parset:
-            setattr(self, parameter, parset[str(parameter)])
+            setattr(self, parameter, dtype(parset[str(parameter)]))
         else:
             setattr(self, parameter, default)

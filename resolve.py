@@ -212,7 +212,7 @@ def resolve(params, numparams):
     
     # Data setup
     if params.simulating:
-        d, N, R, di, d_space, s_space, expI, n = simulate(params, simparams, \
+        d, N, R, di, d_space, s_space, expI, n = sim.simulate(params, simparams, \
             logger)
         
     else:
@@ -955,7 +955,7 @@ def mapfilter_I(d, m, pspec, N, R, logger, k_space, params, numparams,\
             
             # Do a "poor-man's" extended critical filter step using residual
             logger.header2("Trying simple noise estimate without any D.")
-            newvar = ((d - R(exp(m)))**2).mean()
+            newvar = (abs(d - R(exp(m)))**2).mean()
             logger.message('old variance iteration '+str(git-1)+':' + str(N.diag()))
             logger.message('new variance iteration '+str(git)+':' + str(newvar))
             np.save('resolve_output_' + str(params.save) + '/general/oldvar_'+str(git),N.diag())
