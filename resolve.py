@@ -1193,7 +1193,7 @@ def mapfilter_I_u(d, m,u, pspec, N, R, logger, k_space, params, numparams,\
         elif numparams.map_algo == 'lbfgs':
             logger.warn('lbfgs algorithm implemented from scipy, but'\
                 + ' experimental.')
-            m,u = BFGS(m,j,S,M,rho0,params,numparams,limii=10, x1 = u)
+            m,u = Energy_min(m,j,S,M,rho0,params,numparams,limii=10, x1 = u)
             #logger.failure('BFGS for mu not implemented yet!')
             #raise NotImplementedError('BFGS for mu not implemented yet!')
             #m = utils.BFGS(m,j,S,M,rho0,numparams.beta, numparams.etalimii=numparams.map_iter)

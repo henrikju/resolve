@@ -61,7 +61,7 @@ def Energy_cal(x0,j, S, M, rho0,params,xdomain,numparams,mid=0,end=0):
 
         return E,g
 
-def BFGS(x0,j,S,M,rho0,params,numparams,limii=10, x1 = None): #todo add numparams im aufruf
+def Energy_min(x0,j,S,M,rho0,params,numparams,limii=10, x1 = None): #todo add numparams im aufruf
     # x1 = u
     numparams.map_algo = 'BFGS'
     min_method = numparams.map_algo
