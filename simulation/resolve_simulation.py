@@ -82,12 +82,7 @@ def simulate(params, simparams, logger):
     utils.save_results(u,'UV','resolve_output_' + str(params.save) + \
         "/general/" +  params.save + "_uvcov", plotpar='o', value2 = v)
 
-<<<<<<< HEAD
-    # noise
-    N = diagonal_operator(domain=d_space, diag=simparams.sigma**2)
-    #noise updaten
-=======
->>>>>>> master
+
     # response, no simulated primary beam
     A = 1.
     R = r.response(s_space, d_space, u, v, A)
