@@ -1,5 +1,5 @@
 from nifty import *
-from grid_cython import grid_complex_cython, grid_abs_squared_cython
+#from grid_cython import grid_complex_cython, grid_abs_squared_cython
 
 def grid_function(codomain=None, inpoints=None, u=None, v=None, precision=30, abs_squared=False):
     

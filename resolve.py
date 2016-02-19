@@ -931,7 +931,7 @@ def mapfilter_I(d, m, pspec, N, R, logger, k_space, params, numparams,\
         elif numparams.map_algo == 'lbfgs':
             logger.warn('lbfgs algorithm implemented from scipy, but'\
                 + ' experimental.')
-            m = utils.BFGS(m,j,S,M,params.rho0,params,numparams,limii=numparams.map_iter)
+            m = utils.Energy_min(m,j,S,M,params.rho0,params,numparams,limii=numparams.map_iter)
            
         # save iteration results
         mlist.append(m)
@@ -1891,6 +1891,7 @@ class numparameters(object):
             self.check_default('zoomfactor', parset, 1, dtype = float)
         
         self.check_default('pspec', parset, True, dtype = bool)
+        
         if params.pspec:
             
             self.check_default('pspec_algo', parset, 'cg')

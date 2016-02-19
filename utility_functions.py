@@ -66,12 +66,12 @@ def Energy_min(x0,j,S,M,rho0,params,numparams,limii=10, x1 = None): #todo add nu
     numparams.map_algo = 'BFGS'
     min_method = numparams.map_algo
     # es sollten alle moeglichkeiten von minimise funtionieren verwende numparam.map_algo =
-    # ‘Nelder-Mead’ , ‘BFGS’ ,‘L-BFGS-B’ ....
     if params.algorithm == 'ln-map':
 
+        call = callbackstuff(params.save)
         res = minimize(Energy_cal,(x0).val.flatten(),\
-            args=(j,S,M,rho0,params,x0.domain,numparams),method = min_method,jac = True,pgtol=1.e-10,factr=10,\
-            maxiter=limii,callback=callbackbfgs)[0]
+            args=(j,S,M,rho0,params,x0.domain,numparams),method = min_method,jac = True,\
+            options={"maxiter":limii},callback=call.callbackbfgs1)[0]
 
         return field(x0.domain,target=x0.target,val=res)
         
@@ -86,8 +86,8 @@ def Energy_min(x0,j,S,M,rho0,params,numparams,limii=10, x1 = None): #todo add nu
         X[mid:end] = uval
         
         res = minimize(Energy_cal,X,args=(j,S,M,rho0,params,x0.domain,numparams,mid,end),\
-            method = min_method,jac = True,pgtol=1.e-10,factr=10,\
-            maxiter=limii,callback=callbackbfgs)[0]            
+            method = min_method,jac = True,\
+            options={"maxiter":limii},callback=callbackbfgs)[0]            
             
         mval =res[0:mid] 
         uval =res[mid:end]
@@ -165,6 +165,18 @@ def callbackfunc_m(x, i):
            pl.title('Iteration' + str(i)+'_m')
            pl.savefig("resolve_output_"+ str(gsave)+"/last_iterations/iteration"+str(i)+"_expm")
            np.save("resolve_output_"+ str(gsave)+"/last_iterations/iteration"+str(i)+"_expm",exp(x))
+
+class callbackstuff(object):
+    
+    def __init__(self, args):
+        
+        self.i = 0
+        self.savename = args[0] 
+        
+    def callbackbfgs1(self,x):
+        
+        np.save("resolve_output_"+str(self.savename)+"/last_iterations/iteration"+str(self.i)+"_lbfgs",exp(x))
+        self.i += 1
 
 def callbackbfgs(x):
 
