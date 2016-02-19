@@ -131,13 +131,13 @@ def callbackfunc(x, i):
         
         if gsave:
            pl.figure()
-           pl.imshow(convert_RES_to_CASA(exp(x)))
+           pl.imshow(exp(x))
            pl.colorbar()
            pl.title('Iteration' + str(i))
            pl.savefig('resolve_output_' + str(gsave)+ \
                "/last_iterations/" + 'iteration'+str(i))
            np.save('resolve_output_' + str(gsave)+ \
-               "/last_iterations/" + 'iteration' + str(i),x)
+                   "/last_iterations/" + 'iteration' + str(i),exp(x))
            pl.close()
                
 def callbackfunc_u(x, i):
@@ -147,11 +147,11 @@ def callbackfunc_u(x, i):
         
         if gsave:
            pl.figure()
-           pl.imshow(convert_CASA_to_RES(exp(x)))
+           pl.imshow(exp(x))
            pl.colorbar()
            pl.title('Iteration' + str(i)+'_u')
            pl.savefig("resolve_output_"+ str(gsave)+"/last_iterations/iteration"+str(i)+"_expu")
-           np.save("resolve_output_"+ str(gsave)+"/last_iterations/iteration"+str(i)+"_expu",x)
+           np.save("resolve_output_"+ str(gsave)+"/last_iterations/iteration"+str(i)+"_expu",exp(x))
                
 def callbackfunc_m(x, i):
     
@@ -160,15 +160,14 @@ def callbackfunc_m(x, i):
         
         if gsave:
            pl.figure()
-           pl.imshow(convert_CASA_to_RES(exp(x)))
+           pl.imshow(exp(x))
            pl.colorbar()
            pl.title('Iteration' + str(i)+'_m')
            pl.savefig("resolve_output_"+ str(gsave)+"/last_iterations/iteration"+str(i)+"_expm")
-           np.save("resolve_output_"+ str(gsave)+"/last_iterations/iteration"+str(i)+"_expm",x)
+           np.save("resolve_output_"+ str(gsave)+"/last_iterations/iteration"+str(i)+"_expm",exp(x))
 
 def callbackbfgs(x):
 
-    print x
     np.save("resolve_output_"+ str(gsave)+"/last_iterations/iteration"+"_lbfgs",exp(x))
 
 def save_results(value,title,fname,log = None,value2 = None, \
@@ -205,7 +204,7 @@ def save_results(value,title,fname,log = None,value2 = None, \
                 pl.semilogy(value3)
         else :
             if len(np.shape(value)) > 1:
-                pl.imshow(convert_RES_to_CASA(value) * rho0)
+                pl.imshow(value * rho0)
                 pl.colorbar()
             else:
                 pl.plot(value,value2)
@@ -215,7 +214,7 @@ def save_results(value,title,fname,log = None,value2 = None, \
     
     # save data as npy-file
     if len(np.shape(value)) > 1:
-        np.save(fname,convert_RES_to_CASA(value) * rho0)
+        np.save(fname,value * rho0)
     else:
         np.save(fname,value2)
 
