@@ -15,7 +15,7 @@ def simulate(params, simparams, logger):
     logger.header2("Simulating signal and data using provided UV-coverage.")
     
     # Assumes uv-coverage to be accesible via numpy arrays
-    u = np.load(msfn + '_u.npy')
+    u = np.load(msfn + '_u.npy') #msfn...
     v = np.load(msfn + '_v.npy')
 
     # wide-band imaging
@@ -82,7 +82,7 @@ def simulate(params, simparams, logger):
 
     # noise
     N = diagonal_operator(domain=d_space, diag=simparams.sigma**2)
-    
+    #noise updaten
     # response, no simulated primary beam
     A = 1.
     R = r.response(s_space, d_space, u, v, A)

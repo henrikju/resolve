@@ -171,6 +171,42 @@ class energy(object):
         g = self.gradH(x)
         
         return E,g
+#-----------------------POINT-RESOLVE-operators------------------------------------        
+
+class energy_u(object):
+    
+    def __init__(self, args):
+        self.j = args[0]
+        self.S = args[1]
+        self.M = args[2]
+        self.A = args[3]
+        self.B = args[4]
+        self.NU = args[5]
+        self.b = self.B-1
+
+    def H(self, u):
+        """
+        """
+        part2 = self.j.dot(self.A * exp(u))
+        part3 = (self.A * exp(u)).dot(self.M(self.A * exp(u))) / 2 
+        part4 = (u).dot(self.b)+(exp(-u)).dot(self.NU)
+        return part3 + part4 - part2 
+
+    def gradH_u(self,u):
+        """
+        """
+    
+        temp1 = self.B - 1 - self.NU * exp(-u)
+        temp = -self.j * self.A * exp(u) + self.A* exp(u) * \
+            self.M(self.A * (exp(u))) + temp1
+    
+        return temp
+        
+    def egg_u(self, u):
+        
+        E = self.H(u)
+        gu = self.gradH_u(u)        
+        return E,gu        
         
 class energy_mu(object):
     
@@ -188,10 +224,11 @@ class energy_mu(object):
     def H(self,x,u):
         """
         """
-        I = exp(x)+exp(u)
+        I = field(domain = x.domain, val = self.rho0 * (exp(x)+exp(u)))
+        
         part1 = x.dot(self.S.inverse_times(x.weight(power = 0)))  / 2
-        part2 = self.j.dot(self.A * I)
-        part3 = self.A * I.dot(self.M(self.A * I)) / 2
+        part2 = self.j.dot(I)
+        part3 = I.dot(self.M(I)) / 2
         part4 = -u.dot(self.b)-(exp(-u)).dot(self.NU) 
 
         return part1 - part2 + part3 - part4
@@ -200,20 +237,24 @@ class energy_mu(object):
         """
         """
         
-        I = exp(x)+exp(u)
+        I = field(domain = x.domain, val = self.rho0 * (exp(x)+exp(u)))
+        expx = field(domain = x.domain, val = self.rho0 * exp(x)) 
+        
         temp1 = self.S.inverse_times(x)
-        temp = -self.j * self.A * exp(x) + self.A* exp(x) * \
-            self.M(self.A * I) + temp1
+        temp = -self.j * expx + expx * \
+            self.M(I) + temp1
     
         return temp
 
     def gradH_u(self, x,u):
         """
         """
-        I = exp(x)+exp(u)
+        I = field(domain = x.domain, val = self.rho0 * (exp(x)+exp(u)))
+        expu = field(domain = x.domain, val = self.rho0 * exp(u))
+
         temp1 = self.b - self.NU * exp(-u)
-        temp = -self.j * self.A * exp(u) + self.A* exp(u) * \
-            self.M(self.A * I) + temp1
+        temp = -self.j * expu+ expu * \
+            self.M(I) + temp1
     
         return temp
     
@@ -228,6 +269,62 @@ class energy_mu(object):
         E = self.H(self.seff,u)
         gu = self.gradH_u(self.seff,u)        
         return E,gu
+        
+class Dmu_operator(operator):
+    """
+    """
+
+    def _inverse_multiply(self, x):
+        """
+        """
+
+        S = self.para[0]
+        M = self.para[1]
+        m = self.para[2]
+        j = self.para[3]
+        M0 = self.para[4]
+        rho0 = self.para[5]
+        u =self.para[6]
+        
+        I = field(domain = x.domain, val = rho0 * (exp(m)+exp(u)))
+
+        nondiagpart = M_part_operator(M.domain, imp=True, para=[M, m, rho0])
+        
+        diagpartval = (-1. * j * rho0 * exp(m) + rho0 * exp(m) * M(I)).hat()  
+        
+        diag = diagonal_operator(domain = S.domain, diag = 1. * M0)
+
+        part1 = S.inverse_times(x)
+        part2 = diagpartval(x)
+        part3 = nondiagpart(x)
+        part4 = diag(x)
+
+        return part1 + part2 + part3 + part4 
+
+    _matvec = (lambda self, x: self.inverse_times(x).val.flatten())
+    
+
+    def _multiply(self, x):
+        """
+        the operator is defined by its inverse, so multiplication has to be
+        done by inverting the inverse numerically using the conjugate gradient
+        method.
+        """
+        convergence = 0
+        numparams = self.para[8]
+        params = self.para[7]
+
+        if params.pspec_algo == 'cg':
+            x_,convergence = nt.conjugate_gradient(self._matvec, x, \
+                note=True)(tol=numparams.pspec_tol,clevel=numparams.pspec_clevel,\
+                limii=numparams.pspec_iter)
+                
+        elif params.pspec_algo == 'sd':
+            x_,convergence = nt.steepest_descent(self._matvec, x, \
+                note=True)(tol=numparams.pspec_tol,clevel=numparams.pspec_clevel,\
+                limii=numparams.pspec_iter)
+                    
+        return x_
 
 #-----------------------wide band operators------------------------------------
 

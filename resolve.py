@@ -958,7 +958,7 @@ def mapfilter_I(d, m, pspec, N, R, logger, k_space, params, numparams,\
         elif numparams.map_algo == 'lbfgs':
             logger.warn('lbfgs algorithm implemented from scipy, but'\
                 + ' experimental.')
-            m = utils.BFGS(m,j,S,M,params.rho0,params,limii=numparams.map_iter)
+            m = utils.BFGS(m,j,S,M,params.rho0,params,numparams,limii=numparams.map_iter)
            
         # save iteration results
         mlist.append(m)
@@ -1123,7 +1123,7 @@ def mapfilter_I_u(d, m,u, pspec, N, R, logger, k_space, params, numparams,\
     else:    
         M = M_operator(domain=s_space, sym=True, imp=True, para=[N, R])
         j = R.adjoint_times(N.inverse_times(d))
-    D = D_operator(domain=s_space, sym=True, imp=True, para=[S, M, m, j, \
+    D = Dmu_operator(domain=s_space, sym=True, imp=True, para=[S, M, m, j, \
         numparams.M0_start, params.rho0, params, numparams])
    
     #diagnostic plots    
@@ -1151,7 +1151,7 @@ def mapfilter_I_u(d, m,u, pspec, N, R, logger, k_space, params, numparams,\
         S.set_power(newspec=pspec,bare=True)
           
         # uodate operator and optimizer arguments  
-        D.para = [S, M, m, j, numparams.M0_start, params.rho0, params, numparams]
+        D.para = [S, M, m, j, numparams.M0_start, params.rho0,u, params, numparams]
 
         # Check whether to only calculte an uncertainty map
         if params.uncertainty=='only':
@@ -1173,6 +1173,14 @@ def mapfilter_I_u(d, m,u, pspec, N, R, logger, k_space, params, numparams,\
         
         if numparams.map_algo == 'sd':
             en = energy_mu(args) 
+
+            logger.header2("Computing the u-MAP estimate.\n")
+            minimize = nt.steepest_descent(en.egg_u,spam=utils.callbackfunc_u,\
+                note=True)
+            u = minimize(x0=u, alpha=numparams.map_alpha_u, \
+                tol=numparams.map_tol_u, clevel=numparams.map_clevel_u, \
+                limii=numparams.map_iter_u)[0]
+            en.ueff = u
                
             logger.header2("Computing the m-MAP estimate.\n")   
             minimize = nt.steepest_descent(en.egg_s,spam=utils.callbackfunc_m,\
@@ -1181,22 +1189,22 @@ def mapfilter_I_u(d, m,u, pspec, N, R, logger, k_space, params, numparams,\
                 tol=numparams.map_tol, clevel=numparams.map_clevel, \
                 limii=numparams.map_iter)[0]    
             en.seff = m  
-            
-            logger.header2("Computing the u-MAP estimate.\n")
-            minimize = nt.steepest_descent(en.egg_u,spam=utils.callbackfunc_u,\
-                note=True)
-            u = minimize(x0=u, alpha=numparams.map_alpha_u, \
-                tol=numparams.map_tol_u, clevel=numparams.map_clevel_u, \
-                limii=numparams.map_iter_u)[0]
-            en.ueff = u
        
         elif numparams.map_algo == 'lbfgs':
             logger.warn('lbfgs algorithm implemented from scipy, but'\
                 + ' experimental.')
-            logger.failure('BFGS for mu not implemented yet!')
-            raise NotImplementedError('BFGS for mu not implemented yet!')
+            m,u = BFGS(m,j,S,M,rho0,params,numparams,limii=10, x1 = u)
+            #logger.failure('BFGS for mu not implemented yet!')
+            #raise NotImplementedError('BFGS for mu not implemented yet!')
             #m = utils.BFGS(m,j,S,M,rho0,numparams.beta, numparams.etalimii=numparams.map_iter)
             #u = utils.BFGS(u,j,S,M,rho0,params,limii=numparams.map_iter_u)                  
+        #elif numparams.map_algo == 'points':
+        #    args = (j, S, M, rho0, numparams.beta, numparams.eta)
+        #    en = energy_u(args)  
+        #    minimize = nt.steepest_descent(en.egg_u,spam=callbackfunc_u,note=True)
+        #    u = minimize(x0=u, alpha=numparams.map_alpha_u, \
+        #       tol=numparams.map_tol_u, clevel=numparams.map_clevel_u, \
+        #       limii=numparams.map_iter_u)[0]
                 
         # save iteration results
         mlist.append(m)
@@ -1255,7 +1263,7 @@ def mapfilter_I_u(d, m,u, pspec, N, R, logger, k_space, params, numparams,\
                   
             while psloop:
             
-                D.para = [S, M, m, j, M0, params.rho0, params, numparams]
+                D.para = [S, M, m, j, M0, params.rho0,u, params, numparams]
             
                 Sk = projection_operator(domain=k_space)
                 if params.ftmode == 'wsclean':

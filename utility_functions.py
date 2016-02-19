@@ -25,33 +25,77 @@ import matplotlib.pyplot as plt
 import pylab as pl
 import numpy as np
 from nifty import *
-from scipy.optimize import fmin_l_bfgs_b
+from scipy.optimize import minimize
 from operators import *
 import resolve as rs
 
 
-def BFGS_ham(x0,j, S, M, rho0,params,xdomain):
-    args = (j, S, M, rho0,params)
-    x = field(xdomain,val=x0)
-    en = energy(args)
-    return en.H(x)
-
-def BFGS_grad(x0,j, S, M, rho0,params,xdomain):
-    args = (j, S, M, rho0,params)
-    x = field(xdomain,val=x0)
-    en = energy(args)
-    return en.gradH(x).val.flatten() * xdomain.vol.prod()
-
-
-def BFGS(x0,j,S,M,rho0,params,limii=10):
+def Energy_cal(x0,j, S, M, rho0,params,xdomain,numparams,mid=0,end=0):
 
     if params.algorithm == 'ln-map':
+        args = (j, S, M, rho0,params)
+        x = field(xdomain,val=x0)
+        en = energy(args)
+        return en.H(x), en.gradH(x).val.flatten() * xdomain.vol.prod()
+        
+    elif params.algorithm == 'ln-map_u':        
+             
+        sval =np.array(mid)  
+        uval =np.array(mid)  
+        sval = x0[0:mid]    
+        uval = x0[mid:end]
+        s = field(xdomain, val = sval)
+        u = field(xdomain, val = uval)
+  
+        args = (j, S, M, rho0, numparams.beta, numparams.eta,s,u)
+        en = energy_mu(args)
+        gs = en.gradH_s(s,u)
+        gu = en.gradH_u(s,u)
+        E = en.H(s,u)
+        
+        g=np.ones(end)    
+        gsval = gs.val.flatten()* xdomain.vol.prod()
+        guval = gu.val.flatten()* xdomain.vol.prod()
+        g[0:mid] =gsval
+        g[mid:end] =guval
 
-        res = fmin_l_bfgs_b(BFGS_ham,(x0).val.flatten(),fprime=BFGS_grad,\
-            args=(j,S,M,rho0,params,x0.domain),pgtol=1.e-10,factr=10,\
+        return E,g
+
+def BFGS(x0,j,S,M,rho0,params,numparams,limii=10, x1 = None): #todo add numparams im aufruf
+    # x1 = u
+    numparams.map_algo = 'BFGS'
+    min_method = numparams.map_algo
+    # es sollten alle moeglichkeiten von minimise funtionieren verwende numparam.map_algo =
+    # ‘Nelder-Mead’ , ‘BFGS’ ,‘L-BFGS-B’ ....
+    if params.algorithm == 'ln-map':
+
+        res = minimize(Energy_cal,(x0).val.flatten(),\
+            args=(j,S,M,rho0,params,x0.domain,numparams),method = min_method,jac = True,pgtol=1.e-10,factr=10,\
             maxiter=limii,callback=callbackbfgs)[0]
 
         return field(x0.domain,target=x0.target,val=res)
+        
+    elif params.algorithm == 'ln-map_u':
+        
+        mid =params.imsize*params.imsize
+        end =2*params.imsize*params.imsize        
+        X = np.ones(end) 
+        mval = x0.val.flatten()
+        uval = x1.val.flatten()
+        X[0 :mid] = mval
+        X[mid:end] = uval
+        
+        res = minimize(Energy_cal,X,args=(j,S,M,rho0,params,x0.domain,numparams,mid,end),\
+            method = min_method,jac = True,pgtol=1.e-10,factr=10,\
+            maxiter=limii,callback=callbackbfgs)[0]            
+            
+        mval =res[0:mid] 
+        uval =res[mid:end]
+        m = field(x0.domain,target=x0.target,val=mval)
+        u = field(x0.domain,target=x0.target,val=uval)
+
+        return m, u
+                
     else:
         print 'WARNING, BFGS only available yet for standard resolve'
 
