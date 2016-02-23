@@ -6,7 +6,7 @@ from nifty import *
 import numpy as np
 import utility_functions as utils 
 import response as r
-
+import scipy.stats as sc
 asec2rad = 4.84813681e-6
 
 def simulate(params, simparams, logger):
@@ -91,7 +91,7 @@ def simulate(params, simparams, logger):
     sig = R(field(s_space, val = exp(I) + Ip))
     SNR = simparams.SNR
     np.random.seed(simparams.noise_seed)
-    var = abs(sig.dot(sig)) / SNR
+    var = abs(sig.dot(sig)) /(simparams.simpix*simparams.simpix*SNR)
     logger.message('Noise variance used in simulation: ' + str(var))
     N = diagonal_operator(domain=d_space, diag=var)
                  
