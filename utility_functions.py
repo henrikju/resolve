@@ -81,7 +81,7 @@ def Energy_min(x0,en,params,numparams,min_method='BFGS',limii=10, x1 = None):
         
         res = minimize(Energy_cal,X,args=(en,params,x0.domain,mid,end),\
             method = min_method,jac = True,\
-            options={"maxiter":limii},callback=call.callbackscipy)[0]            
+            options={"maxiter":limii},callback=call.callbackscipy)            
             
         mval =res.x[0:mid] 
         uval =res.x[mid:end]

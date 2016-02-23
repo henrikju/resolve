@@ -1208,7 +1208,7 @@ def mapfilter_I_u(d, m,u, pspec, N, R, logger, k_space, params, numparams,\
         elif algoliste[algo_run] in scipyminimizer:
             logger.warn(algoliste[algo_run]+' algorithm implemented from scipy, but'\
                 + ' experimental.')
-            m,u = utils.Energy_min(m,en,params,numparams,algoliste[algo_run],limii=10, x1 = u)
+            m,u = utils.Energy_min(m,en,params,numparams,algoliste[algo_run],numparams.map_iter, x1 = u)
             mlist.append(m)
             #save...
             
