@@ -14,7 +14,7 @@ import time as ttt
 # SAVE: bool, whether to save results to 'path' or not
 # path: string, path where results are saved
     
-def fastresolve(R, d, SNR_assumed, s_space, path, SAVE=True, do_point=False):
+def fastresolve(R, d, SNR_assumed, s_space, path, SAVE=True, do_point=False, noise_update):
 
     print 'Starting fastResolve cycle'
     
@@ -148,7 +148,7 @@ def fastresolve(R, d, SNR_assumed, s_space, path, SAVE=True, do_point=False):
         S.set_power(spec)
         spec_list += [S.get_power()]
         
-        if(ii % 10 == 0):
+        if(noise_update and ii % 10 == 0):
             aaa = ttt.time()
             est_var = (R(exp(m)) - d).val
             est_var = np.abs(est_var)**2

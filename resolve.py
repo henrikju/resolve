@@ -212,7 +212,7 @@ def resolve(params, numparams):
     
     # Data setup
     if params.simulating:
-        d, N, R, di, d_space, s_space, expI, n = sim.simulate(params, simparams, \
+        d, N, R, di, d_space, s_space, expI, n = simulate(params, simparams, \
             logger)
         
     else:
@@ -949,13 +949,17 @@ def mapfilter_I(d, m, pspec, N, R, logger, k_space, params, numparams,\
                 rho0 = params.rho0)
             write_output_to_fits(np.transpose(exp(m.val)*params.rho0),params,\
                 notifier = str(git), mode='I')
+                
 
         # check whether to do ecf-like noise update
-        if params.noise_update:
-            
+        if (params.noise_update and git==1):          
             # Do a "poor-man's" extended critical filter step using residual
             logger.header2("Trying simple noise estimate without any D.")
-            newvar = (abs(d - R(exp(m)))**2).mean()
+            #newvar = ((d - R(exp(m)))**2).mean()
+            REG_VAR = 0.9
+            est_var = (R(exp(m)) - d).val
+            est_var = np.abs(est_var)**2
+            est_var = REG_VAR*est_var + (1-REG_VAR)*est_var.mean()
             logger.message('old variance iteration '+str(git-1)+':' + str(N.diag()))
             logger.message('new variance iteration '+str(git)+':' + str(newvar))
             np.save('resolve_output_' + str(params.save) + '/general/oldvar_'+str(git),N.diag())
@@ -965,6 +969,8 @@ def mapfilter_I(d, m, pspec, N, R, logger, k_space, params, numparams,\
             np.save('resolve_output_' + str(params.save) +'/general/absRmmean_'\
                 +str(git),abs(R(exp(m)).val*R.target.num()).mean())
             N.para = [newvar*np.ones(np.shape(N.diag()))]
+            M = M_operator(domain=s_space, sym=True, imp=True, para=[N, R])
+            j = R.adjoint_times(N.inverse_times(d))
 
         # Check whether to do the pspec iteration
         if params.pspec:
