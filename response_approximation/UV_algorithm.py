@@ -121,6 +121,8 @@ def fastresolve(R, d, SNR_assumed, s_space, path, SAVE=True, do_point=False):
             np.save(path+"point_cycle_Ipoint_final", Ipoint.val)
     
 
+    # TOTAL HOTFIX INPUT
+    m.val = np.log(np.abs(np.load('./sgs/finalimage_clean.npy')))
     for ii in xrange(40):
         aaa = ttt.time()
     
@@ -145,6 +147,20 @@ def fastresolve(R, d, SNR_assumed, s_space, path, SAVE=True, do_point=False):
     
         S.set_power(spec)
         spec_list += [S.get_power()]
+        
+        if(ii % 10 == 0):
+            aaa = ttt.time()
+            est_var = (R(exp(m)) - d).val
+            est_var = np.abs(est_var)**2
+            est_var = 0.9*est_var + (1-0.9)*est_var.mean()
+    
+            UV_quants = UV_quantities(domain=s_space, codomain=k_space,
+                                      u=u, v=v, d=d, varis=est_var, A=A)
+            RR = UV_quants.get_RR()
+            NN = UV_quants.get_NN()
+            dd = UV_quants.get_dd()
+            print "variance estimation took", ttt.time()-aaa, "seconds"
+            print "and yielded a mean variance of", est_var.mean()
     
     
     H = lognormal_Hamiltonian(S=S, N=NN, R=RR, d=dd)
