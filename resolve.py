@@ -221,7 +221,7 @@ def resolve(params, numparams):
     # Starting guess setup    
     # Check whether to do FastResolve for the starting guess, only for ln-map
     if params.init_type_s == 'fastResolve':
-        m_s, pspec, k_space = ra.fastresolve(R, d, numparams.SNR_assumed, s_space, 'resolve_output_'+params.save+'/fastresolve/', do_point=False)
+        m_s, pspec, k_space = ra.fastresolve(R, d, numparams.SNR_assumed, s_space, 'resolve_output_'+params.save+'/fastresolve/', params.noise_update, do_point=False)
     
     else:
         # Standard Starting guesses setup
