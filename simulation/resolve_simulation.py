@@ -17,7 +17,6 @@ def simulate(params, simparams, logger):
     logger.header2("Simulating signal and data using provided UV-coverage.")
 
     # Assumes uv-coverage to be accesible via numpy arrays
-
     u = np.load(params.ms + '_u.npy')
     v = np.load(params.ms + '_v.npy')
 
@@ -42,6 +41,7 @@ def simulate(params, simparams, logger):
     #setting up signal power spectrum
     powspec_I = [simparams.p0_sim * (1. + (k / simparams.k0) ** 2) ** \
         (-simparams.sigalpha) for k in kindex]
+    #powspec_I[0] *= 1e-20
     utils.save_results(kindex,'simulated signal PS','resolve_output_' + \
         str(params.save) + "/general/" + params.save + '_ps_original',\
         log = 'loglog', value2 = powspec_I)
@@ -61,7 +61,7 @@ def simulate(params, simparams, logger):
 #               np.random.randint(0,high=simparams.simpix)] = \
 #               np.random.random() * simparams.pfactor * np.max(exp(I))  
         np.random.seed(81232562353)
-        Ip= sc.invgamma.rvs(0.5, size = simparams.simpix*simparams.simpix,scale = 1e-7) 
+        Ip= sc.invgamma.rvs(0.5, size = simparams.simpix*simparams.simpix,scale = 1e-6) 
         Ip.shape = (simparams.simpix,simparams.simpix)
         np.random.seed()          
    
@@ -121,6 +121,38 @@ def simulate(params, simparams, logger):
         
     utils.save_results(di,"dirty image",'resolve_output_' + str(params.save) +\
         "/general/" + params.save + "_di")
+        
+        
+    #temporary
+    #uv_cut_str = '>90'
+    if simparams.uv_cut_str:
+        proz = float('0.'+(simparams.uv_cut_str[1:len(simparams.uv_cut_str)]))
+        uv_cut = proz*np.max(np.sqrt(u**2+v**2)) 
+        if simparams.uv_cut_str[0] == '>':
+            u_top = u[np.sqrt(u**2+v**2)> uv_cut]    
+            v_top = v[np.sqrt(u**2+v**2)> uv_cut]
+            d_u_space = point_space(len(u_top), datatype = np.complex128)
+            Rdirty_u = r.response(s_space, d_u_space, u_top,v_top,A)
+            N_u = diagonal_operator(domain=d_u_space, diag=var)
+            n_u =field(d_u_space, random="gau", var=N_u.diag(bare=True))
+            d_u=Rdirty_u(exp(I) + Ip)+n_u
+            di_u = Rdirty_u.adjoint_times(d_u)* s_space.vol[0] * s_space.vol[1]
+            utils.save_results(di_u,"dirty image_u",'resolve_output_' + str(params.save) +\
+                "/general/" + params.save + "_di_u")
+            return d_u, N_u, Rdirty_u, di_u, d_u_space, s_space, exp(I), n_u
+        elif simparams.uv_cut_str[0] == '<':
+            u_bot = u[np.sqrt(u**2+v**2)< uv_cut]
+            v_bot = v[np.sqrt(u**2+v**2)< uv_cut]
+            d_m_space = point_space(len(u_bot), datatype = np.complex128)
+            Rdirty_m = r.response(s_space, d_m_space, u_bot,v_bot,A)     
+            N_m = diagonal_operator(domain=d_m_space, diag=var)     
+            n_m =field(d_m_space, random="gau", var=N_m.diag(bare=True))
+            d_m=Rdirty_m(exp(I) + Ip)+n_m
+            di_m = Rdirty_m.adjoint_times(d_m)  * s_space.vol[0] * s_space.vol[1]   
+            utils.save_results(di_m,"dirty image_m",'resolve_output_' + str(params.save) +\
+                "/general/" + params.save + "_di_m")
+            return d_m, N_m, Rdirty_m, di_m, d_m_space, s_space, exp(I), n_m    
+    #temporary
     
     return d, N, R, di, d_space, s_space, exp(I), n
     
@@ -143,13 +175,21 @@ class simparameters(object):
         self.check_default('offset', parset, 0, dtype = float)   
         self.check_default('compact', parset, False, dtype = bool)
         self.check_default('noise_corruption', parset, 0, dtype = float)
+        self.check_default('uv_cut_str', parset, '', dtype = str)
         if self.compact:
             self.check_default('nsources', parset, 50, dtype = int)
             self.check_default('pfactor', parset, 5, dtype = float)
     
     def check_default(self, parameter, parset, default, dtype=str):
-
+        
         if parameter in parset:
-            setattr(self, parameter, dtype(parset[str(parameter)]))
+            if dtype != bool:
+                setattr(self, parameter, dtype(parset[str(parameter)]))
+            else:
+                if parset[str(parameter)] == 'True':
+                    setattr(self, parameter,True)
+                elif parset[str(parameter)] == 'False':
+                    setattr(self, parameter,False)                
         else:
             setattr(self, parameter, default)
+
