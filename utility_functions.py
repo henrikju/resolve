@@ -186,12 +186,13 @@ def load_numpy_data(msfn, logger):
         nspw = np.load(msfn + '_nspw.npy')
         summary = np.load(msfn + '_sum.npy')
         nvis = np.load(msfn + '_nvis.npy')
+        flags =  np.load(msfn + '_flags.npy')
 
     except IOError:
         logger.failure('No numpy file exists in the working directory with '\
             + 'the suffix ' + msfn)
 
-    return vis, sigma, u, v, freqs, nchan, nspw, nvis, summary
+    return vis, sigma, u, v, flags, freqs, nchan, nspw, nvis, summary
     
 def update_globvars(gsavein, gcallbackin):
 

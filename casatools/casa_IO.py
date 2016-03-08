@@ -73,6 +73,7 @@ def read_data_from_ms(msfn, viscol="DATA", noisecol='SIGMA',
     u = []
     v = []
     freq = []
+    allflags = []
     if mode == 'pol':
   
       Qvis = []
@@ -139,28 +140,43 @@ def read_data_from_ms(msfn, viscol="DATA", noisecol='SIGMA',
                     ifraxis=False)['sigma']
             flags = 1. - ms.getdata(["flag"])['flag']
 
-            if not(np.sum(flags[0])==np.sum(flags[1])\
-               ==np.sum(flags[2])== np .sum(flags[3])):
-               m.warn('Warning: Different flags for' \
-               +'different correlations/channels.'\
-               +'Hard flag is applied: If any '\
-               +'correlation is flagged, this gets'\
-               +'extended to all.')
-               maximum = np.ones(np.shape(flags[0]))
-               for i in range(4):
-                   if flags[i].sum() < maximum.sum():
-                       maximum = flags[i]
-                       flag = maximum
-            else:
-                flag = flags[0]      
+            if mode == 'tot':
+                if not(np.sum(flags[0])==np .sum(flags[3])):
+                   m.warn('Warning: Different flags for ' \
+                   +'different correlations/channels. '\
+                   +'Hard flag is applied: If any necessary'\
+                   +'correlation is flagged, this gets '\
+                   +'extended to all.')
+                   maximum = np.ones(np.shape(flags[0]))
+                   for i in [0,3]:
+                       if flags[i].sum() < maximum.sum():
+                           maximum = flags[i]
+                           flag = maximum
+                else:
+                    flag = flags[0]
+                    
+            elif mode == 'pol':
+                if not(np.sum(flags[1])==np .sum(flags[2])):
+                   m.warn('Warning: Different flags for ' \
+                   +'different correlations/channels. '\
+                   +'Hard flag is applied: If any necessary'\
+                   +'correlation is flagged, this gets '\
+                   +'extended to all.')
+                   maximum = np.ones(np.shape(flags[1]))
+                   for i in [1,2]:
+                       if flags[i].sum() < maximum.sum():
+                           maximum = flags[i]
+                           flag = maximum
+                else:
+                    flag = flags[1]
 
             #Start reading data.
 
             if mode == 'tot': 
-                vis_temp = flag * (Spart[0] * data_temp[0]\
+                vis_temp = (Spart[0] * data_temp[0]\
                     + Spart[1] * data_temp[1] + Spart[2] *\
                     data_temp[2] + Spart[3] * data_temp[3])
-                sigma_temp = flag * (Spart[0] * s_temp[0]\
+                sigma_temp = (Spart[0] * s_temp[0]\
                     + Spart[1] * s_temp[1] + Spart[2] *\
                     + s_temp[2] + Spart[3] * s_temp[3])
 
@@ -171,11 +187,11 @@ def read_data_from_ms(msfn, viscol="DATA", noisecol='SIGMA',
 
 
             if mode == 'pol':
-                Qvis_temp = flag * (QSpart[0] *\
+                Qvis_temp = (QSpart[0] *\
                     data_temp[0] + QSpart[1] *\
 		         data_temp[1]+QSpart[2] *data_temp[2]\
 		         + QSpart[3] * data_temp[3])
-                Qsigma_temp = flag * (QSpart[0] *\
+                Qsigma_temp = (QSpart[0] *\
                     s_temp[0] + QSpart[1] * s_temp[1]+\
                     QSpart[2] * s_temp[2] +\
                     QSpart[3] * s_temp[3])
@@ -183,10 +199,10 @@ def read_data_from_ms(msfn, viscol="DATA", noisecol='SIGMA',
                 Qvis.append(Qvis_temp)
                 Qsigma.append(Qsigma_temp)
      
-                Uvis_temp = flag * (USpart[0] * data_temp[0] + USpart[1]\
+                Uvis_temp = (USpart[0] * data_temp[0] + USpart[1]\
                     * data_temp[1] + USpart[2] *\
                     data_temp[2] + USpart[3] * data_temp[3])
-                Usigma_temp = flag * (USpart[0] * s_temp[0] + USpart[1] * \
+                Usigma_temp = (USpart[0] * s_temp[0] + USpart[1] * \
                     s_temp[1] + USpart[2] * s_temp[2] +\
                     USpart[3] * s_temp[3])
 
@@ -216,6 +232,9 @@ def read_data_from_ms(msfn, viscol="DATA", noisecol='SIGMA',
             #functions take care of flags.
             u.append(utemp)
             v.append(vtemp)
+            
+            #Reads all flags into general array
+            allflags.append(flag)
 
         try:
             summary = ms.summary()
@@ -227,13 +246,13 @@ def read_data_from_ms(msfn, viscol="DATA", noisecol='SIGMA',
 
         if mode =='tot':
 
-            return vis, sigma, u, v, freq, nchan, nspw,\
+            return vis, sigma, u, v, allflags, freq, nchan, nspw,\
                 nvis, summary
 
 
         if mode == 'pol':
 	  
-            return Qvis, Qsigma, Uvis, Usigma, freq, lamb,\
+            return Qvis, Qsigma, Uvis, Usigma, allflags, freq, lamb,\
                 u, v, nchan, nspw, summary
         
     else:

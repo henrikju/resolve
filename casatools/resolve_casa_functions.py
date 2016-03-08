@@ -42,9 +42,7 @@ def read_data_withCASA(ms, viscol="DATA", noisecol='SIGMA', \
         
     if mode == 'tot':
         
-        print 'B'
-        
-        vis, sigma, u, v, freq, nchan, nspw, nvis, summary = \
+        vis, sigma, u, v, allflags, freq, nchan, nspw, nvis, summary = \
             ca.read_data_from_ms(ms, viscol=viscol, noisecol=noisecol, \
             mode=mode, noise_est = noise_est)
         
@@ -58,12 +56,13 @@ def read_data_withCASA(ms, viscol="DATA", noisecol='SIGMA', \
             np.save('../'+save+'_nspw',nspw)
             np.save('../'+save+'_sum',summary)
             np.save('../'+save+'_nvis',nvis)
+            np.save('../'+save+'_flags',allflags)
         
         return vis, sigma, u, v, freq, nchan, nspw, nvis, summary
             
     elif mode == 'pol':
         
-        Qvis, Qsigma, Uvis, Usigma, freq, lamb, u, v, nchan, nspw, summary = \
+        Qvis, Qsigma, Uvis, Usigma, allflags, freq, lamb, u, v, nchan, nspw, summary = \
         ca.read_data_from_ms(ms, viscol=viscol, noisecol=noisecol, \
             mode=mode, noise_est = noise_est)
         
@@ -78,6 +77,7 @@ def read_data_withCASA(ms, viscol="DATA", noisecol='SIGMA', \
             np.save(save+'_nchan',nchan)
             np.save(save+'_nspw',nspw)
             np.save(save+'_sum',summary)
+            np.save(save+'_flags',allflags)
         
         return Qvis, Uvis, Qsigma, Usigma, u, v, freq, nchan, nspw, nvis, \
             summary
