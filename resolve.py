@@ -242,7 +242,16 @@ def resolve(params, numparams):
     if params.stokes != 'I':
         logger.failure('Pol-RESOLVE not yet implemented.')
         raise NotImplementedError('Pol-RESOLVE not yet implemented.')
-
+        
+    if params.algorithm == 'fastResolve':
+       
+        logger.header2('\nStarting only fastRESOLVE reconstruction.')
+        t1 = time()
+        m_s, p_I, k_space = ra.fastresolve(R, d, numparams.SNR_assumed, s_space, 'resolve_output_'+params.save+'/fastresolve/', params.noise_update, do_point=False)
+        t2 = time()
+        logger.success("Completed algorithm.")
+        logger.message("Time to complete: " + str((t2 - t1) / 3600.) + ' hours.')
+        
     if params.algorithm == 'ln-map':
 
         logger.header2('\nStarting standard RESOLVE reconstruction.')
@@ -256,6 +265,8 @@ def resolve(params, numparams):
             logger.success("Completed uncertainty map calculation.")
             logger.message("Time to complete: " + str((t2 - t1) / 3600.) + ' hours.')
             sys.exit(0)
+            
+        
 
         if params.freq != 'wideband':
 

@@ -6,6 +6,7 @@ from nifty import *
 import numpy as np
 import utility_functions as utils 
 import response as r
+from operators import *
 
 asec2rad = 4.84813681e-6
 
@@ -91,11 +92,11 @@ def simulate(params, simparams, logger):
     np.random.seed(simparams.noise_seed)
     var = abs(sig.dot(sig)) / SNR
     logger.message('Noise variance used in simulation: ' + str(var))
-    N = diagonal_operator(domain=d_space, diag=var)
+    N = N_operator(domain=d_space,imp=True,para=[var*np.ones(d_space.num())])
                  
     #Set up Noise
     np.random.seed(simparams.noise_seed)
-    n = field(d_space, random="gau", var=N.diag(bare=True))
+    n = field(d_space, random="gau", var=var)
     # revert to unseeded randomness
     np.random.seed()  
 
@@ -111,7 +112,7 @@ def simulate(params, simparams, logger):
         zerocenter=True)
     R = r.response(s_space, d_space, u, v, A)
     if simparams.noise_corruption:
-        N = diagonal_operator(domain=d_space, diag=var*simparams.noise_corruption)
+        N = N_operator(domain=d_space,imp=True,para=[var*simparams.noise_corruption*np.ones(d_space.num())])
         logger.message('Corrupt noise variance by factor: ' + str(simparams.noise_corruption))
     
     # dirty image for comparison
