@@ -147,11 +147,10 @@ def read_data_from_ms(msfn, viscol="DATA", noisecol='SIGMA',
                    +'Hard flag is applied: If any necessary'\
                    +'correlation is flagged, this gets '\
                    +'extended to all.')
-                   maximum = np.ones(np.shape(flags[0]))
-                   for i in [0,3]:
-                       if flags[i].sum() < maximum.sum():
-                           maximum = flags[i]
-                           flag = maximum
+                   flag = np.ones(np.shape(flags[0]))
+                   flag[flags[0]==0.] == 0.
+                   flag[flags[3]==0.] == 0.
+                         
                 else:
                     flag = flags[0]
                     
@@ -162,11 +161,9 @@ def read_data_from_ms(msfn, viscol="DATA", noisecol='SIGMA',
                    +'Hard flag is applied: If any necessary'\
                    +'correlation is flagged, this gets '\
                    +'extended to all.')
-                   maximum = np.ones(np.shape(flags[1]))
-                   for i in [1,2]:
-                       if flags[i].sum() < maximum.sum():
-                           maximum = flags[i]
-                           flag = maximum
+                   flag = np.ones(np.shape(flags[1]))
+                   flag[flags[1]==0.] == 0.
+                   flag[flags[2]==0.] == 0.
                 else:
                     flag = flags[1]
 
