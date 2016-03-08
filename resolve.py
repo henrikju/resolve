@@ -46,7 +46,7 @@ import pyfits
 #import RESOLVE-package modules
 import utility_functions as utils
 import simulation.resolve_simulation as sim
-import response_approximation.UV_algorithm as ra
+#import response_approximation.UV_algorithm as ra
 from operators import *
 import response as r
 import Messenger as M
@@ -501,7 +501,7 @@ def datasetup(params, logger):
     #Non-WSclean (i.e. standard) loading routines
     else:
     
-        vis, sigma, u, v, freqs, nchan, nspw, nvis, params.summary = \
+        vis, sigma, u, v, flags, freqs, nchan, nspw, nvis, params.summary = \
             utils.load_numpy_data(params.ms, logger)
     
     # definition of wideband data operators
@@ -607,9 +607,19 @@ def datasetup(params, logger):
         if not params.ftmode == 'wsclean':
             sspw,schan = params.freq[0], params.freq[1]
             vis = vis[sspw][schan]
-            sigma = sigma[sspw][schan]
+            sigma = sigma[sspw]
             u = u[sspw][schan]
-            v = v[sspw][schan]        
+            v = v[sspw][schan] 
+            flags = flags[sspw][schan]
+            
+            
+            # cut away flagged data
+            vis = np.delete(vis,np.where(flags)==0)
+            u = np.delete(u,np.where(flags)==0)
+            v = np.delete(v,np.where(flags)==0)
+            sigma = np.delete(sigma,np.where(flags)==0)
+            
+
         
         # Dumb simple estimate can be done now after reading in the data.
         # No time information needed.
@@ -963,7 +973,7 @@ def mapfilter_I(d, m, pspec, N, R, logger, k_space, params, numparams,\
                 
 
         # check whether to do ecf-like noise update
-        if (params.noise_update and git==1):          
+        if (params.noise_update and (git==1 or git%3==0)):          
             # Do a "poor-man's" extended critical filter step using residual
             logger.header2("Trying simple noise estimate without any D.")
             #newvar = ((d - R(exp(m)))**2).mean()
