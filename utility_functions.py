@@ -30,11 +30,21 @@ from operators import *
 import resolve as rs
 
 
-def Energy_cal(x0,en,params,xdomain,mid=0,end=0):
+def Energy_cal(x0,en,params,xdomain,mid=0,end=0,pure=''):
 
     if params.algorithm == 'ln-map':
         x = field(xdomain,val=x0)
         return en.H(x), en.gradH(x).val.flatten() * xdomain.vol.prod()
+        
+    elif pure == 'pure_m' and params.algorithm == 'ln-map_u':         
+        x = field(xdomain,val=x0)
+        E,g =en.egg_s(x)
+        return E, g.val.flatten() * xdomain.vol.prod()
+
+    elif pure == 'pure_u' and params.algorithm == 'ln-map_u':
+        x = field(xdomain,val=x0)
+        E,g =en.egg_u(x)
+        return E, g.val.flatten() * xdomain.vol.prod()
         
     elif params.algorithm == 'ln-map_u':        
              
@@ -57,7 +67,7 @@ def Energy_cal(x0,en,params,xdomain,mid=0,end=0):
 
         return E,g
 
-def Energy_min(x0,en,params,numparams,min_method='BFGS',limii=10, x1 = None): 
+def Energy_min(x0,en,params,numparams,min_method='BFGS',limii=10, x1 = None,pure=''): 
     
     call = callbackclass(params.save,min_method,params.callback)      
     if params.algorithm == 'ln-map':
@@ -68,6 +78,14 @@ def Energy_min(x0,en,params,numparams,min_method='BFGS',limii=10, x1 = None):
 
         return field(x0.domain,target=x0.target,val=res.x)
         
+    elif params.algorithm == 'ln-map_u' and pure:
+        
+        res = minimize(Energy_cal,x0,args=(en,params,x0.domain,0,0,pure),\
+            method = min_method,jac = True,\
+            options={"maxiter":limii},callback=call.callbackscipy)    
+            
+        return field(x0.domain,target=x0.target,val=res.x) 
+            
     elif params.algorithm == 'ln-map_u':
         
         mid =params.imsize*params.imsize
@@ -326,7 +344,7 @@ def log(x,base=None):
         if(isinstance(x,field)):
 #            if(np.any(x.val<1E-323)):
 #                print("** LOGSTROKE **")
-            return field(x.domain,val=np.log(np.maximum(1E-323,x.val))/np.log(base).astype(x.domain.datatype),target=x.target)
+            return field(x.domain,val=utils.log(np.maximum(1E-323,x.val))/np.log(base).astype(x.domain.datatype),target=x.target)
             #return field(x.domain,val=np.log(x.val)/np.log(base).astype(x.domain.datatype),target=x.target)
         else:
 #            if(np.any(x<1E-323)):

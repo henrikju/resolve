@@ -328,7 +328,7 @@ def resolve(params, numparams):
                 #single-band uncertainty map
                 t1 = time()
                 mapfilter_a(d, m_a, pspec_a, N, R, logger, rho0,\
-                k_space, params, numparams, np.log(exp(m_s)+exp(m_u)),0)
+                k_space, params, numparams, utils.log(exp(m_s)+exp(m_u)),0)
                 t2 = time()
                 logger.success("Completed alpha uncertainty map calculation.")
                 logger.message("Time to complete: " + str((t2 - t1) / 3600.)\
@@ -687,12 +687,15 @@ def starting_guess_setup(params, logger, s_space, d_space):
         m_s = field(s_space, target=s_space.get_codomain(), val=di)   
         
     else:
-        if params.sglogim:
+        if params.sglogim:             
             m_s = field(s_space, target=s_space.get_codomain(), \
                 val=np.load(params.init_type_s))
         else:
+            start_logm = np.abs(np.load(params.init_type_s))
+            if np.any(start_logm) == 0:
+               start_logm[start_logm==0] = 1e-15  
             m_s = field(s_space, target=s_space.get_codomain(), \
-                val=log(np.abs(np.load(params.init_type_s))))
+                val=utils.log(start_logm))
     
     # Optional starting guesses for m_u
             
@@ -710,8 +713,11 @@ def starting_guess_setup(params, logger, s_space, d_space):
                 m_u = field(s_space, target=s_space.get_codomain(),\
                     val=params.init_type_u)
             else:
+                start_logu = np.abs(np.load(params.init_type_u))
+                if np.any(start_logu) == 0:
+                   start_logu[start_logu==0] = 1e-15  
                 m_u = field(s_space, target=s_space.get_codomain(), \
-                val=log(np.abs(np.load(params.init_type_u))))
+                val=utils.log(start_logu))
                 
     if params.rho0 == 'from_sg':
         
@@ -753,7 +759,7 @@ def starting_guess_setup(params, logger, s_space, d_space):
         pspec = np.array((1+kindex)**-2 * numparams.p0)
         pspec_m_s = m_s.power(pindex=pindex, kindex=kindex, rho=rho_k)
         #see notes, use average power in dirty map to constrain monopole
-        pspec[0] = (np.prod(k_space.vol)**(-2) * np.log(\
+        pspec[0] = (np.prod(k_space.vol)**(-2) * utils.log(\
             np.sqrt(pspec_m_s[0]) *  np.prod(k_space.vol))**2) / 2.
     # default simple k^2 spectrum with free monopole
     elif params.init_type_p == 'k^2':
@@ -1040,7 +1046,7 @@ def mapfilter_I(d, m, pspec, N, R, logger, k_space, params, numparams,\
             convergence += 1
         
         # convergence test in power spectrum reconstruction 
-        if np.max(np.abs(np.log(pspec)/np.log(S.get_power()))) < np.log(1e-1):
+        if np.max(np.abs(utils.log(pspec)/utils.log(S.get_power()))) < utils.log(1e-1):
             logger.message('Power spectrum converged.')
             convergence += 1
         
@@ -1147,7 +1153,6 @@ def mapfilter_I_u(d, m,u, pspec, N, R, logger, k_space, params, numparams,\
         uold = u
         args = (j, S, M, params.rho0, numparams.beta, numparams.eta,m,u)
         en = energy_mu(args)
-        
         if numparams.algo_liste[algo_run] == 'sd_u':
 
             logger.header2("Computing the u-MAP estimate.\n")
@@ -1193,12 +1198,23 @@ def mapfilter_I_u(d, m,u, pspec, N, R, logger, k_space, params, numparams,\
             mlist.append(m)
             utils.save_u(u,git,params)
             utils.save_mu(m,u,git,params)  
-            
         # convergence test in s/u-map reconstruction
             if np.max(np.abs(m - mold)) < params.map_conv and np.max(np.abs(u - uold)) < params.map_conv:
                 logger.message('Image converged.')
-                convergence += 1
-          
+                convergence += 1            
+        #temporary
+        elif numparams.algo_liste[algo_run] == 'test_u':
+             u = utils.Energy_min(u,en,params,numparams,'L-BFGS-B',numparams.map_iter_u, x1 = None,pure='pure_u')
+             utils.save_u(u,git,params)          
+             utils.save_mu(m,u,git,params)   
+             
+        elif numparams.algo_liste[algo_run] == 'test_m':
+             m = utils.Energy_min(m,en,params,numparams,'L-BFGS-B',numparams.map_iter, x1 = None,pure='pure_m')
+             utils.save_m(m,git,params)          
+             utils.save_mu(m,u,git,params)              
+        #temporary
+            
+        # convergence test in s/u-map reconstruction
         elif numparams.algo_liste[algo_run] == 'pure_points':
             args = (j, S, M, params.rho0, numparams.beta, numparams.eta)
             en = energy_u(args)  
@@ -1285,7 +1301,7 @@ def mapfilter_I_u(d, m,u, pspec, N, R, logger, k_space, params, numparams,\
                      + params.save + "_up_powevol.png")
                 pl.close()
         # convergence test in power spectrum reconstruction 
-            if np.max(np.abs(np.log(pspec)/np.log(S.get_power()))) < np.log(1e-1):
+            if np.max(np.abs(utils.log(pspec)/utils.log(S.get_power()))) < utils.log(1e-1):
                 logger.message('Power spectrum converged.')
                 convergence += 1
         
@@ -1462,8 +1478,8 @@ def mapfilter_a(d, m, pspec, N, R, logger, k_space, params, numparams,\
         
         # convergence test in power spectrum reconstruction
         if params.pspec_a:
-            if np.max(np.abs(np.log(pspec)/np.log(S.get_power())))\
-                < np.log(1e-1):
+            if np.max(np.abs(utils.log(pspec)/utils.log(S.get_power())))\
+                < utils.log(1e-1):
                     logger.message('Power spectrum converged.')
                     convergence += 1
         
@@ -1669,7 +1685,7 @@ def wienerfilter(d, m, pspec, N, R, logger, k_space, params, numparams,\
             convergence += 1
         
         # convergence test in power spectrum reconstruction 
-        if np.max(np.abs(np.log(pspec)/np.log(S.get_power()))) < np.log(1e-1):
+        if np.max(np.abs(utils.log(pspec)/utils.log(S.get_power()))) < utils.log(1e-1):
             logger.message('Power spectrum converged.')
             convergence += 1
         
@@ -1857,7 +1873,7 @@ class parameters(object):
             else:
                 if parset[str(parameter)] == 'True':
                     setattr(self, parameter,True)
-                elif parset[str(parameter)] == 'False':
+                elif parset[str(parameter)] == 'False' or parset[str(parameter)] == '' :
                     setattr(self, parameter,False)                
         else:
             setattr(self, parameter, default)
@@ -1945,17 +1961,17 @@ class numparameters(object):
             self.check_default('map_iter_u', parset,100, dtype = float)
             self.algo_liste = self.set_algo_liste(self.map_algo)
             
-    def set_algo_liste(self,string):
+    def set_algo_liste(self,st):
         
         scipyminimizer = ('TNC','COBYLA','SLSQP','dogleg','trust-ncg',\
             'CG','BFGS', 'L-BFGS-B','Nelder-Mead','Powell','Newton-CG')
     
-        if string == 'sd':
+        if st == 'sd':
             return ['sd_u','sd_m','ps_rec']
-        elif string in scipyminimizer:
-            return [string,'ps_rec']
+        elif st in scipyminimizer:
+            return [st,'ps_rec']
         else:
-            return np.array(string.split(),dtype=str)
+            return np.array(st.split(),dtype=str)
         
     def check_default(self, parameter, parset, default, dtype=str):
         
@@ -1965,13 +1981,10 @@ class numparameters(object):
             else:
                 if parset[str(parameter)] == 'True':
                     setattr(self, parameter,True)
-                elif parset[str(parameter)] == 'False':
+                elif parset[str(parameter)] == 'False' or parset[str(parameter)] == '' :
                     setattr(self, parameter,False)                
         else:
             setattr(self, parameter, default)
-
-         
-        
 
 
 def parse_input_file(parsetfn, save, verbosity):
@@ -1984,8 +1997,11 @@ def parse_input_file(parsetfn, save, verbosity):
     # File must fulfil: No whitespaces beyond variables; no free lines;
     # one whitespace to set variables to False
     for row in reader:
-        if len(row) != 0 and row[0] != '%' and len(row)==3:
-            parset[row[0]] = row[1]+' '+row[2]
+        if len(row) != 0 and row[0] != '%' and len(row)>2:
+            st = row[1]
+            for i in range(2,len(row)):             
+                st +=' '+row[i]
+            parset[row[0]] = st #row[1]+' '+row[2]
         else:
             parset[row[0]] = row[1]
 

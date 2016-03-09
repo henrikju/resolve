@@ -52,7 +52,9 @@ def simulate(params, simparams, logger):
     np.random.seed(simparams.signal_seed)
     I = field(s_space, random="syn", spec=S.get_power()) + simparams.offset
     np.random.seed()    
-    
+    #temporary
+    #I = I-np.log(100)
+    #temporary
     # compact signal
     Ip = np.zeros((simparams.simpix,simparams.simpix))
     if simparams.compact:
@@ -61,17 +63,31 @@ def simulate(params, simparams, logger):
 #               np.random.randint(0,high=simparams.simpix)] = \
 #               np.random.random() * simparams.pfactor * np.max(exp(I))  
         np.random.seed(81232562353)
-        Ip= sc.invgamma.rvs(0.5, size = simparams.simpix*simparams.simpix,scale = 1e-6) 
+        Ip= sc.invgamma.rvs(0.5, size = simparams.simpix*simparams.simpix,scale = simparams.sim_eta) 
         Ip.shape = (simparams.simpix,simparams.simpix)
         np.random.seed()          
    
-
+    #temporary
+    #Ip[np.where(Ip==np.max(Ip))]=np.max(Ip)/4
+    tmax = np.max(Ip) 
+    Ip[np.where(Ip==np.max(Ip))]=np.min(Ip)
+    Ip[80][75] = tmax
+    #Ip = Ip/100
+    #temporary
     utils.save_results(exp(I),'simulated extended signal','resolve_output_' + \
         str(params.save) + "/general/" + params.save + '_expsimI')
     if simparams.compact:
         utils.save_results(Ip,'simulated compact signal','resolve_output_' + \
             str(params.save) + "/general/" + params.save + '_expsimIp')
-    
+            
+    #temporary
+    startu = Ip
+    startu[np.where(startu < 10)] = 1e-10
+    np.random.seed(1234)
+    startu[np.where(startu >= 10)] = startu[np.where(startu >= 10)]*np.random.random()*2
+    np.random.seed()
+    np.save('startu_test',startu)
+    #temporary
 
     # maximum k-mode and resolution of data
     uvrange = np.array([np.sqrt(u[i]**2 + v[i]**2) for i in range(len(u))])
@@ -124,6 +140,10 @@ def simulate(params, simparams, logger):
         
         
     #temporary
+    dnnf = R(exp(I) + Ip)
+    dnn =  R.adjoint_times(dnnf) * s_space.vol[0] * s_space.vol[1]
+    noisemap = di - dnn
+    np.save('noisetest',noisemap)
     #uv_cut_str = '>90'
     if simparams.uv_cut_str:
         proz = float('0.'+(simparams.uv_cut_str[1:len(simparams.uv_cut_str)]))
@@ -153,6 +173,13 @@ def simulate(params, simparams, logger):
                 "/general/" + params.save + "_di_m")
             return d_m, N_m, Rdirty_m, di_m, d_m_space, s_space, exp(I), n_m    
     #temporary
+            
+    # plot the dirty beam
+    uvcov = field(d_space,val=np.ones(np.shape(d.val), \
+        dtype = np.complex128))            
+    db = R.adjoint_times(uvcov) * s_space.vol[0] * s_space.vol[1]       
+    utils.save_results(db,"dirty beam",'resolve_output_' + str(params.save)+\
+            '/general/' + params.save + "_db")
     
     return d, N, R, di, d_space, s_space, exp(I), n
     
@@ -178,7 +205,8 @@ class simparameters(object):
         self.check_default('uv_cut_str', parset, '', dtype = str)
         if self.compact:
             self.check_default('nsources', parset, 50, dtype = int)
-            self.check_default('pfactor', parset, 5, dtype = float)
+            self.check_default('pfactor', parset, 5, dtype = float)      
+            self.check_default('sim_eta', parset, 1e-7, dtype = float) 
     
     def check_default(self, parameter, parset, default, dtype=str):
         
@@ -188,7 +216,7 @@ class simparameters(object):
             else:
                 if parset[str(parameter)] == 'True':
                     setattr(self, parameter,True)
-                elif parset[str(parameter)] == 'False':
+                elif parset[str(parameter)] == 'False' or parset[str(parameter)] == '' :
                     setattr(self, parameter,False)                
         else:
             setattr(self, parameter, default)

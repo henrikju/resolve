@@ -22,6 +22,7 @@ along with RESOLVE. If not, see <http://www.gnu.org/licenses/>.
 
 from nifty import *
 from nifty import nifty_tools as nt
+from utility_functions import exp 
 #-------------------------single band operators--------------------------------
 
 class N_operator(operator):
