@@ -46,7 +46,7 @@ import pyfits
 #import RESOLVE-package modules
 import utility_functions as utils
 import simulation.resolve_simulation as sim
-#import response_approximation.UV_algorithm as ra
+import response_approximation.UV_algorithm as ra
 from operators import *
 import response as r
 import Messenger as M
@@ -187,7 +187,7 @@ def resolve(params, numparams):
         '/D_reconstructions'):
             os.makedirs('resolve_output_' + str(params.save)+\
             '/D_reconstructions')
-    if params.init_type_s == 'fastResolve':
+    if (params.init_type_s == 'fastResolve' or params.algorithm == 'fastResolve'):
        if not os.path.exists('resolve_output_' + str(params.save)+\
         '/fastresolve'):
             os.makedirs('resolve_output_' + str(params.save)+\
@@ -209,7 +209,6 @@ def resolve(params, numparams):
     for par in vars(numparams).items():
         logger.message(str(par[0])+' = '+str(par[1]),verb_level=2)
     
-    
     # Data setup
     if params.simulating:
         d, N, R, di, d_space, s_space, expI, n = simulate(params, simparams, \
@@ -217,13 +216,8 @@ def resolve(params, numparams):
         
     else:
         d, N, R, di, d_space, s_space = datasetup(params, logger)
-    
-    # Starting guess setup    
-    # Check whether to do FastResolve for the starting guess, only for ln-map
-    if params.init_type_s == 'fastResolve':
-        m_s, pspec, k_space = ra.fastresolve(R, d, numparams.SNR_assumed, s_space, 'resolve_output_'+params.save+'/fastresolve/', params.noise_update, do_point=False)
-    
-    else:
+
+    if not params.init_type_s == 'fr_internal':
         # Standard Starting guesses setup
         if ((params.algorithm == ('ln-map') or params.algorithm == ('wf')) and (params.freq != 'wideband')):
             m_s, pspec, params, k_space = starting_guess_setup(params, logger, s_space, d_space)
@@ -235,7 +229,16 @@ def resolve(params, numparams):
             m_s, pspec, m_a, pspec_a, params, k_space = starting_guess_setup(params, logger, s_space, d_space)
     
         elif (params.algorithm == 'ln-map_u') and (params.freq == 'wideband'):
-            m_s, pspec, m_u, m_a, pspec_a, params, k_space = starting_guess_setup(params, logger, s_space, d_space)        
+            m_s, pspec, m_u, m_a, pspec_a, params, k_space = starting_guess_setup(params, logger, s_space, d_space)
+            
+    # Starting guess setup    
+    # Check whether to do FastResolve for the starting guess, only for ln-map
+    if algorithm == 'prefastResolve':
+        if params.init_type_s == 'fr_internal':
+            m_s = 'fr_internal'
+        if params.init_type_p == 'fr_internal':
+            pspec = 'fr_internal'
+        m_s, pspec, k_space = ra.fastresolve(R, d, s_space, 'resolve_output_'+params.save+'/fastresolve/', noise_update=params.noise_update, noise_est=params.noise_est, msg=m_s, psg=pspec, point=500)
               
     # Begin: Start Filter *****************************************************
     
@@ -243,11 +246,11 @@ def resolve(params, numparams):
         logger.failure('Pol-RESOLVE not yet implemented.')
         raise NotImplementedError('Pol-RESOLVE not yet implemented.')
         
-    if params.algorithm == 'fastResolve':
+    if params.algorithm == 'onlyfastResolve':
        
         logger.header2('\nStarting only fastRESOLVE reconstruction.')
         t1 = time()
-        m_s, p_I, k_space = ra.fastresolve(R, d, numparams.SNR_assumed, s_space, 'resolve_output_'+params.save+'/fastresolve/', params.noise_update, do_point=False)
+        m_s, p_I, k_space = ra.fastresolve(R, d, s_space, 'resolve_output_'+params.save+'/fastresolve/', point=1000)
         t2 = time()
         logger.success("Completed algorithm.")
         logger.message("Time to complete: " + str((t2 - t1) / 3600.) + ' hours.')
@@ -620,13 +623,13 @@ def datasetup(params, logger):
             sigma = np.delete(sigma,np.where(flags)==0)
             
 
-        
         # Dumb simple estimate can be done now after reading in the data.
         # No time information needed.
         if params.noise_est == 'simple':
             
             variance = np.var(np.array(vis))*np.ones(np.shape(np.array(vis)))\
                 .flatten()
+        
         elif params.noise_est == 'SNR_assumed':
             
             variance = np.ones(np.shape(sigma))*np.mean(np.abs(vis*vis))/(1.+numparams.SNR_assumed)
@@ -713,8 +716,11 @@ def starting_guess_setup(params, logger, s_space, d_space):
             m_s = field(s_space, target=s_space.get_codomain(), \
                 val=np.load(params.init_type_s))
         else:
+            expm_s_val = np.abs(np.load(params.init_type_s))
+            expm_s_val[expm_s_val==0] = 1e-12
             m_s = field(s_space, target=s_space.get_codomain(), \
-                val=log(np.abs(np.load(params.init_type_s))))
+                val=log(expm_s_val))
+            del expm_s_val    
     
     # Optional starting guesses for m_u
             
