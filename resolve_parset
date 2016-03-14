@@ -5,18 +5,19 @@ cellsize 2e-5
 % 
 % 
 %main p[arameters]
-algorithm ln-map
+algorithm ln-map_u
 stokes I
 ftmode wsclean
-init_type_s const
-init_type_s_u const
-init_type_p k^2_mon
+init_type_s sd_sp_uvcut_05_expm15.npy
+init_type_u sp_points30_expu50.npy
+init_type_p k^2
 init_type_a_p k^2
 freq 0 0
 rho0 1
-pbeam 
-uncertainty 
+pbeam False
+uncertainty False
 simulating True
+compact True
 noise_est 
 noise_update 
 map_conv 1e-1
@@ -24,19 +25,20 @@ pspec_conv 1e-1
 callback 3
 reffreq 0 0
 pspec True
-pspec_a True
+pspec_a False
+pspec_algo cg
 uncertainty_a 
 % 
 % 
 %numerical parameters
 final_convlevel 4
 viscol data
-map_algo lbfgs
+map_algo CG
 pspec_algo cg
 m_start 0.1
 m_a_start 0.1
 u_start 0.1
-global_iter 1
+global_iter 50
 global_iter_a 50
 M0_start 0
 M0_start_a 0
@@ -45,7 +47,8 @@ bin_a 70
 p0 1
 p0_a 1
 beta 1.5
-eta 1e-7
+eta 5e-6
+sim_eta 5e-6
 alpha_prior 
 alpha_prior_a 
 smoothing 10.
@@ -54,7 +57,7 @@ pspec_tol 1e-3
 pspec_tol_a 1e-3
 pspec_clevel 3
 pspec_clevel_a 3
-pspec_iter 1
+pspec_iter 100
 pspec_iter_a 1
 map_alpha 1e-4
 map_alpha_u 1e-4
@@ -65,11 +68,17 @@ map_tol_a 1e-5
 map_clevel 3
 map_clevel_u 3
 map_clevel_a 3
-map_iter 10
-map_iter_u 10
+map_iter 100
+map_iter_u 100
 map_iter_a 1
 ncpu 1
 ncpu_a 2
-nrun 1
+nrun 8
 nrun_a 8
 wb_globiter 10
+k0 400
+sigalpha 2.0
+signal_seed 523453421
+p0_sim 1e-10
+SNR 10
+offset -9

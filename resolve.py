@@ -40,7 +40,6 @@ import pylab as pl
 import numpy as np
 from nifty import *
 from nifty import nifty_tools as nt
-import scipy.stats as sc
 import pyfits
 
 #import RESOLVE-package modules
@@ -159,7 +158,6 @@ def resolve(params, numparams):
     # Define simulation parameter class if needed
     if params.simulating:
         simparams = sim.simparameters(params)
-    
     # Set up save directories                                                
     if not os.path.exists('resolve_output_' + str(params.save)+'/general'):
         os.makedirs('resolve_output_' + str(params.save)+'/general')
@@ -343,7 +341,7 @@ def resolve(params, numparams):
                 #single-band uncertainty map
                 t1 = time()
                 mapfilter_a(d, m_a, pspec_a, N, R, logger, rho0,\
-                k_space, params, numparams, np.log(exp(m_s)+exp(m_u)),0)
+                k_space, params, numparams, utils.log(exp(m_s)+exp(m_u)),0)
                 t2 = time()
                 logger.success("Completed alpha uncertainty map calculation.")
                 logger.message("Time to complete: " + str((t2 - t1) / 3600.)\
@@ -712,7 +710,7 @@ def starting_guess_setup(params, logger, s_space, d_space):
         m_s = field(s_space, target=s_space.get_codomain(), val=di)   
         
     else:
-        if params.sglogim:
+        if params.sglogim:             
             m_s = field(s_space, target=s_space.get_codomain(), \
                 val=np.load(params.init_type_s))
         else:
@@ -720,8 +718,7 @@ def starting_guess_setup(params, logger, s_space, d_space):
             expm_s_val[expm_s_val==0] = 1e-12
             m_s = field(s_space, target=s_space.get_codomain(), \
                 val=log(expm_s_val))
-            del expm_s_val    
-    
+  
     # Optional starting guesses for m_u
             
     if params.algorithm == 'ln-map_u':
@@ -738,8 +735,11 @@ def starting_guess_setup(params, logger, s_space, d_space):
                 m_u = field(s_space, target=s_space.get_codomain(),\
                     val=params.init_type_u)
             else:
+                start_logu = np.abs(np.load(params.init_type_u))
+                if np.any(start_logu) == 0:
+                   start_logu[start_logu==0] = 1e-15  
                 m_u = field(s_space, target=s_space.get_codomain(), \
-                val=log(np.abs(np.load(params.init_type_u))))
+                val=utils.log(start_logu))
                 
     if params.rho0 == 'from_sg':
         
@@ -781,7 +781,7 @@ def starting_guess_setup(params, logger, s_space, d_space):
         pspec = np.array((1+kindex)**-2 * numparams.p0)
         pspec_m_s = m_s.power(pindex=pindex, kindex=kindex, rho=rho_k)
         #see notes, use average power in dirty map to constrain monopole
-        pspec[0] = (np.prod(k_space.vol)**(-2) * np.log(\
+        pspec[0] = (np.prod(k_space.vol)**(-2) * utils.log(\
             np.sqrt(pspec_m_s[0]) *  np.prod(k_space.vol))**2) / 2.
     # default simple k^2 spectrum with free monopole
     elif params.init_type_p == 'k^2':
@@ -919,7 +919,7 @@ def mapfilter_I(d, m, pspec, N, R, logger, k_space, params, numparams,\
     git = 1
     plist = [pspec]
     mlist = [m]
-    
+    call = utils.callbackclass(params.save,numparams.map_algo,params.callback) 
 
     while git <= numparams.global_iter:
         """
@@ -951,14 +951,15 @@ def mapfilter_I(d, m, pspec, N, R, logger, k_space, params, numparams,\
        
         if numparams.map_algo == 'sd':
             en = energy(args)
-            minimize = nt.steepest_descent(en.egg,spam=utils.callbackfunc,note=True)
+            minimize = nt.steepest_descent(en.egg,spam=call.callbackfunc,note=True)
             m = minimize(x0=m, alpha=numparams.map_alpha, \
                 tol=numparams.map_tol, clevel=numparams.map_clevel, \
                 limii=numparams.map_iter)[0]
         elif numparams.map_algo == 'lbfgs':
             logger.warn('lbfgs algorithm implemented from scipy, but'\
                 + ' experimental.')
-            m = utils.Energy_min(m,j,S,M,params.rho0,params,numparams,limii=numparams.map_iter)
+            en = energy(args)
+            m = utils.Energy_min(m,en,params,numparams,limii=numparams.map_iter)
            
         # save iteration results
         mlist.append(m)
@@ -1073,7 +1074,7 @@ def mapfilter_I(d, m, pspec, N, R, logger, k_space, params, numparams,\
             convergence += 1
         
         # convergence test in power spectrum reconstruction 
-        if np.max(np.abs(np.log(pspec)/np.log(S.get_power()))) < np.log(1e-1):
+        if np.max(np.abs(utils.log(pspec)/utils.log(S.get_power()))) < utils.log(1e-1):
             logger.message('Power spectrum converged.')
             convergence += 1
         
@@ -1090,7 +1091,6 @@ def mapfilter_I(d, m, pspec, N, R, logger, k_space, params, numparams,\
                     'resolve_output_' + str(params.save) +\
                     "/D_reconstructions/" + params.save + "_D")
                 
-                
             return m, pspec
 
         git += 1
@@ -1102,12 +1102,14 @@ def mapfilter_I_u(d, m,u, pspec, N, R, logger, k_space, params, numparams,\
     *args):
     """
     """
-
+    scipyminimizer = ('TNC','COBYLA','SLSQP','dogleg','trust-ncg',\
+        'CG','BFGS', 'L-BFGS-B','Nelder-Mead','Powell','Newton-CG')
+    
     if params.freq == 'wideband':
         logger.header1("Begin total intensity wideband Point-RESOLVE iteration cycle.")
     else:
         logger.header1("Begin total intensity Point-RESOLVE iteration cycle.")  
-      
+    
     s_space = m.domain
     kindex = k_space.get_power_indices()[0]
                  
@@ -1144,13 +1146,16 @@ def mapfilter_I_u(d, m,u, pspec, N, R, logger, k_space, params, numparams,\
     # iteration parameters
     convergence = 0
     git = 1
+    algo_run = 0
     plist = [pspec]
     mlist = [m]    
+    call = utils.callbackclass(params.save,numparams.map_algo,params.callback)     
 
     while git <= numparams.global_iter:
         """
         Global filter loop.
         """
+
         logger.header2("Starting global up iteration #" + str(git) + "\n")
 
         # update power operator after each iteration step
@@ -1174,79 +1179,83 @@ def mapfilter_I_u(d, m,u, pspec, N, R, logger, k_space, params, numparams,\
 
         mold = m
         uold = u
-
         args = (j, S, M, params.rho0, numparams.beta, numparams.eta,m,u)
-        
-        if (numparams.map_algo == 'sd' or numparams.map_algo == 'lbfgs'):
-            en = energy_mu(args) 
+        en = energy_mu(args)
+        if numparams.algo_liste[algo_run] == 'sd_u':
 
             logger.header2("Computing the u-MAP estimate.\n")
-            minimize = nt.steepest_descent(en.egg_u,spam=utils.callbackfunc_u,\
+            minimize = nt.steepest_descent(en.egg_u,spam=call.callbackfunc_u,\
                 note=True)
             u = minimize(x0=u, alpha=numparams.map_alpha_u, \
                 tol=numparams.map_tol_u, clevel=numparams.map_clevel_u, \
                 limii=numparams.map_iter_u)[0]
-            en.ueff = u
+                
+            utils.save_u(u,git,params)          
+            utils.save_mu(m,u,git,params)             
+            
+        elif numparams.algo_liste[algo_run] == 'sd_m':
                
             logger.header2("Computing the m-MAP estimate.\n")   
-            minimize = nt.steepest_descent(en.egg_s,spam=utils.callbackfunc_m,\
+            minimize = nt.steepest_descent(en.egg_s,spam=call.callbackfunc_m,\
                 note=True)
             m = minimize(x0=m, alpha=numparams.map_alpha, \
                 tol=numparams.map_tol, clevel=numparams.map_clevel, \
-                limii=numparams.map_iter)[0]    
-            en.seff = m  
-       
-        elif numparams.map_algo == 'lbfgs':
-            logger.warn('lbfgs algorithm implemented from scipy, but'\
-                + ' experimental.')
-            m,u = Energy_min(m,j,S,M,rho0,params,numparams,limii=10, x1 = u)
-            #logger.failure('BFGS for mu not implemented yet!')
-            #raise NotImplementedError('BFGS for mu not implemented yet!')
+                limii=numparams.map_iter)[0]   
+                
+            if params.freq == 'wideband':
+                utils.save_m(m,git,params,wideband_git)                       
+            else:
+                utils.save_m(m,git,params)  
+            mlist.append(m)
+            utils.save_mu(m,u,git,params)  
+             
+            if np.max(np.abs(m - mold)) < params.map_conv:
+                logger.message('Image converged.')
+                convergence += 1                    
 
-            #m = utils.BFGS(m,j,S,M,rho0,numparams.beta, numparams.etalimii=numparams.map_iter)
-            #u = utils.BFGS(u,j,S,M,rho0,params,limii=numparams.map_iter_u)                  
-        #elif numparams.map_algo == 'points':
-        #    args = (j, S, M, rho0, numparams.beta, numparams.eta)
-        #    en = energy_u(args)  
-        #    minimize = nt.steepest_descent(en.egg_u,spam=callbackfunc_u,note=True)
-        #    u = minimize(x0=u, alpha=numparams.map_alpha_u, \
-        #       tol=numparams.map_tol_u, clevel=numparams.map_clevel_u, \
-        #       limii=numparams.map_iter_u)[0]
-                
-        # save iteration results
-        mlist.append(m)
-        if params.freq == 'wideband':
-            utils.save_results(exp(m.val), "map, iter #" + str(git), \
-                'resolve_output_' + str(params.save) +\
-                '/m_reconstructions/' + params.save + "_expm" +\
-                str(wideband_git) + "_" + str(git), rho0 = params.rho0)
-            write_output_to_fits(np.transpose(exp(m.val)*params.rho0),params, \
-                notifier = str(wideband_git) + "_" + str(git),mode = 'I')
+       
+        elif numparams.algo_liste[algo_run] in scipyminimizer:
+            logger.warn(numparams.algo_liste[algo_run]+' algorithm implemented from scipy, but'\
+                + ' experimental.')
+            m,u = utils.Energy_min(m,en,params,numparams,numparams.algo_liste[algo_run],numparams.map_iter, x1 = u)
+
+            if params.freq == 'wideband':
+                utils.save_m(m,git,params,wideband_git)                       
+            else:
+                utils.save_m(m,git,params)  
+            mlist.append(m)
+            utils.save_u(u,git,params)
+            utils.save_mu(m,u,git,params)  
+        # convergence test in s/u-map reconstruction
+            if np.max(np.abs(m - mold)) < params.map_conv and np.max(np.abs(u - uold)) < params.map_conv:
+                logger.message('Image converged.')
+                convergence += 1            
+        #temporary
+        elif numparams.algo_liste[algo_run] == 'test_u':
+             u = utils.Energy_min(u,en,params,numparams,'L-BFGS-B',numparams.map_iter_u, x1 = None,pure='pure_u')
+             utils.save_u(u,git,params)          
+             utils.save_mu(m,u,git,params)   
+             
+        elif numparams.algo_liste[algo_run] == 'test_m':
+             m = utils.Energy_min(m,en,params,numparams,'L-BFGS-B',numparams.map_iter, x1 = None,pure='pure_m')
+             utils.save_m(m,git,params)          
+             utils.save_mu(m,u,git,params)              
+        #temporary
             
-        else:
-            utils.save_results(exp(m.val), "map, iter #" + str(git), \
-                'resolve_output_' + str(params.save) +\
-                '/m_reconstructions/' + params.save + "_expm" + str(git), \
-                rho0 = params.rho0)
-            write_output_to_fits(np.transpose(exp(m.val)*params.rho0),params,\
-                notifier = str(git), mode='I')
-                
-        utils.save_results(exp(u.val), "map, iter #" + str(git), \
-            'resolve_output_' + str(params.save) +\
-            '/u_reconstructions/' + params.save + str(git), \
-            rho0 = params.rho0)
-        write_output_to_fits(np.transpose(exp(u.val)*params.rho0),params,\
-            notifier = str(git), mode='I_u')       
-                
-        utils.save_results(exp(u.val)+exp(m.val), "map, iter #" + str(git), \
-            'resolve_output_' + str(params.save) +\
-            '/mu_reconstructions/' + params.save + str(git), \
-            rho0 = params.rho0)
-        write_output_to_fits(np.transpose((exp(u.val)+exp(m.val))*params.rho0),params,\
-            notifier = str(git), mode='I_mu')                      
-        
-        # check whether to do ecf-like noise update
-        if params.noise_update:
+        # convergence test in s/u-map reconstruction
+        elif numparams.algo_liste[algo_run] == 'pure_points':
+            args = (j, S, M, params.rho0, numparams.beta, numparams.eta)
+            en = energy_u(args)  
+            minimize = nt.steepest_descent(en.egg_u,spam=call.callbackfunc_u,note=True)
+            u = minimize(x0=u, alpha=numparams.map_alpha_u, \
+               tol=numparams.map_tol_u, clevel=numparams.map_clevel_u, \
+               limii=numparams.map_iter_u)[0]
+               
+            utils.save_u(u,git,params)    
+
+        # check whether to do ecf-like noise update              
+        elif numparams.algo_liste[algo_run] == 'update_noise':        
+        #if params.noise_update:
             # Do a "poor-man's" extended critical filter step using residual
             logger.header2("Trying simple noise estimate without any D.")
             newvar = (np.abs((d.val - R(exp(m)+exp(u)))**2).mean())
@@ -1261,7 +1270,7 @@ def mapfilter_I_u(d, m,u, pspec, N, R, logger, k_space, params, numparams,\
             N.para = [newvar*np.ones(np.shape(N.diag()))]
         
         # Check whether to do the pspec iteration
-        if params.pspec:
+        elif numparams.algo_liste[algo_run]=='ps_rec':
             logger.header2("Computing the power spectrum.\n")
 
             #extra loop to take care of possible nans in PS calculation
@@ -1302,34 +1311,27 @@ def mapfilter_I_u(d, m,u, pspec, N, R, logger, k_space, params, numparams,\
             
             logger.message("    Current M0:  " + str(D.para[4])+ '\n.')
 
-
         # check whether to do pspec saves
-        if params.pspec:
-            plist.append(pspec)
-            utils.save_results(kindex,"ps, iter #" + str(git), \
-                'resolve_output_' + str(params.save) +\
-                "/p_reconstructions/" + params.save + "_p" + str(git)+"_up", \
-                value2=pspec,log='loglog')
+            if params.pspec:
+                plist.append(pspec)
+                utils.save_results(kindex,"ps, iter #" + str(git), \
+                    'resolve_output_' + str(params.save) +\
+                    "/p_reconstructions/" + params.save + "_p" + str(git)+"_up", \
+                    value2=pspec,log='loglog')
             
             # powevol plot needs to be done in place
-            pl.figure()
-            for i in range(len(plist)):
-                pl.loglog(kindex, plist[i], label="iter" + str(i))
-            pl.title("Global iteration pspec progress")
-            pl.legend()
-            pl.savefig("resolve_output_" + str(params.save) +"/p_reconstructions/"\
-                 + params.save + "_up_powevol.png")
-            pl.close()
-        
-        # convergence test in s/u-map reconstruction
-        if np.max(np.abs(m - mold)) < params.map_conv and np.max(np.abs(u - uold)) < params.map_conv:
-            logger.message('Image converged.')
-            convergence += 1
-        
+                pl.figure()
+                for i in range(len(plist)):
+                    pl.loglog(kindex, plist[i], label="iter" + str(i))
+                pl.title("Global iteration pspec progress")
+                pl.legend()
+                pl.savefig("resolve_output_" + str(params.save) +"/p_reconstructions/"\
+                     + params.save + "_up_powevol.png")
+                pl.close()
         # convergence test in power spectrum reconstruction 
-        if np.max(np.abs(np.log(pspec)/np.log(S.get_power()))) < np.log(1e-1):
-            logger.message('Power spectrum converged.')
-            convergence += 1
+            if np.max(np.abs(utils.log(pspec)/utils.log(S.get_power()))) < utils.log(1e-1):
+                logger.message('Power spectrum converged.')
+                convergence += 1
         
         #global convergence test
         if convergence >= numparams.final_convlevel:
@@ -1345,7 +1347,11 @@ def mapfilter_I_u(d, m,u, pspec, N, R, logger, k_space, params, numparams,\
                 
             return m,u, pspec
 
-        git += 1
+        if algo_run == len(numparams.algo_liste)-1:
+           algo_run = 0
+           git += 1
+        else:
+           algo_run += 1
 
     return m,u, pspec
     
@@ -1380,7 +1386,7 @@ def mapfilter_a(d, m, pspec, N, R, logger, k_space, params, numparams,\
     git = 1
     plist = [pspec]
     mlist = [m]
-    
+    call = utils.callbackclass(params.save,numparams.map_algo,params.callback) 
 
     while git <= numparams.global_iter_a:
         """
@@ -1413,7 +1419,7 @@ def mapfilter_a(d, m, pspec, N, R, logger, k_space, params, numparams,\
         
         if numparams.map_algo == 'sd':
             en = energy_a(args)
-            minimize = nt.steepest_descent(en.egg,spam=utils.callbackfunc,note=True)
+            minimize = nt.steepest_descent(en.egg,spam=call.callbackfunc,note=True)
             m = minimize(x0=m, alpha=numparams.map_alpha_a, \
                 tol=numparams.map_tol_a, clevel=numparams.map_clevel_a, \
                 limii=numparams.map_iter_a)[0]
@@ -1500,8 +1506,8 @@ def mapfilter_a(d, m, pspec, N, R, logger, k_space, params, numparams,\
         
         # convergence test in power spectrum reconstruction
         if params.pspec_a:
-            if np.max(np.abs(np.log(pspec)/np.log(S.get_power())))\
-                < np.log(1e-1):
+            if np.max(np.abs(utils.log(pspec)/utils.log(S.get_power())))\
+                < utils.log(1e-1):
                     logger.message('Power spectrum converged.')
                     convergence += 1
         
@@ -1707,7 +1713,7 @@ def wienerfilter(d, m, pspec, N, R, logger, k_space, params, numparams,\
             convergence += 1
         
         # convergence test in power spectrum reconstruction 
-        if np.max(np.abs(np.log(pspec)/np.log(S.get_power()))) < np.log(1e-1):
+        if np.max(np.abs(utils.log(pspec)/utils.log(S.get_power()))) < utils.log(1e-1):
             logger.message('Power spectrum converged.')
             convergence += 1
         
@@ -1829,8 +1835,8 @@ class parameters(object):
 
         #mandatory parameters
         self.ms = parset['ms']
-        self.imsize = parset['imsize']
-        self.cellsize = parset['cellsize']
+        self.imsize = int(parset['imsize'])
+        self.cellsize = float(parset['cellsize'])
         
         #non-parset parameters dealing with code-system interactions
         self.save = save
@@ -1890,7 +1896,13 @@ class parameters(object):
     def check_default(self, parameter, parset, default, dtype=str):
         
         if parameter in parset:
-            setattr(self, parameter, dtype(parset[str(parameter)]))
+            if dtype != bool:
+                setattr(self, parameter, dtype(parset[str(parameter)]))
+            else:
+                if parset[str(parameter)] == 'True':
+                    setattr(self, parameter,True)
+                elif parset[str(parameter)] == 'False' or parset[str(parameter)] == '' :
+                    setattr(self, parameter,False)                
         else:
             setattr(self, parameter, default)
 
@@ -1915,7 +1927,7 @@ class numparameters(object):
         self.check_default('map_alpha', parset, 1e-4, dtype = float)
         self.check_default('map_tol', parset, 1e-5, dtype = float)
         self.check_default('map_clevel', parset, 3, dtype = float)
-        self.check_default('map_iter', parset, 100, dtype = float)
+        self.check_default('map_iter', parset, 100, dtype = int)
         self.check_default('final_convlevel', parset, 4, dtype = float)
         self.check_default('viscol', parset, 'data')
         if params.noise_est == 'SNR_assumed':
@@ -1975,17 +1987,32 @@ class numparameters(object):
             self.check_default('map_tol_u', parset,1e-5, dtype = float)
             self.check_default('map_clevel_u', parset,3, dtype = float)
             self.check_default('map_iter_u', parset,100, dtype = float)
+            self.algo_liste = self.set_algo_liste(self.map_algo)
+            
+    def set_algo_liste(self,st):
         
-
+        scipyminimizer = ('TNC','COBYLA','SLSQP','dogleg','trust-ncg',\
+            'CG','BFGS', 'L-BFGS-B','Nelder-Mead','Powell','Newton-CG')
+    
+        if st == 'sd':
+            return ['sd_u','sd_m','ps_rec']
+        elif st in scipyminimizer:
+            return [st,'ps_rec']
+        else:
+            return np.array(st.split(),dtype=str)
+        
     def check_default(self, parameter, parset, default, dtype=str):
         
         if parameter in parset:
-            setattr(self, parameter, dtype(parset[str(parameter)]))
+            if dtype != bool:
+                setattr(self, parameter, dtype(parset[str(parameter)]))
+            else:
+                if parset[str(parameter)] == 'True':
+                    setattr(self, parameter,True)
+                elif parset[str(parameter)] == 'False' or parset[str(parameter)] == '' :
+                    setattr(self, parameter,False)                
         else:
             setattr(self, parameter, default)
-
-         
-        
 
 
 def parse_input_file(parsetfn, save, verbosity):
@@ -1998,8 +2025,11 @@ def parse_input_file(parsetfn, save, verbosity):
     # File must fulfil: No whitespaces beyond variables; no free lines;
     # one whitespace to set variables to False
     for row in reader:
-        if len(row) != 0 and row[0] != '%' and len(row)==3:
-            parset[row[0]] = row[1]+' '+row[2]
+        if len(row) != 0 and row[0] != '%' and len(row)>2:
+            st = row[1]
+            for i in range(2,len(row)):             
+                st +=' '+row[i]
+            parset[row[0]] = st #row[1]+' '+row[2]
         else:
             parset[row[0]] = row[1]
 

@@ -21,7 +21,8 @@ along with RESOLVE. If not, see <http://www.gnu.org/licenses/>.
 """
 
 from nifty import *
-
+from nifty import nifty_tools as nt
+from utility_functions import exp 
 #-------------------------single band operators--------------------------------
 
 class N_operator(operator):
@@ -214,7 +215,7 @@ class energy_mu(object):
         self.j = args[0]
         self.S = args[1]
         self.M = args[2]
-        self.A = args[3]
+        self.rho0 = args[3]
         self.B = args[4]
         self.NU = args[5]
         self.seff = args[6]
@@ -314,12 +315,12 @@ class Dmu_operator(operator):
         numparams = self.para[8]
         params = self.para[7]
 
-        if params.pspec_algo == 'cg':
+        if numparams.pspec_algo == 'cg':
             x_,convergence = nt.conjugate_gradient(self._matvec, x, \
                 note=True)(tol=numparams.pspec_tol,clevel=numparams.pspec_clevel,\
                 limii=numparams.pspec_iter)
                 
-        elif params.pspec_algo == 'sd':
+        elif numparams.pspec_algo == 'sd':
             x_,convergence = nt.steepest_descent(self._matvec, x, \
                 note=True)(tol=numparams.pspec_tol,clevel=numparams.pspec_clevel,\
                 limii=numparams.pspec_iter)
