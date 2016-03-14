@@ -25,33 +25,88 @@ import matplotlib.pyplot as plt
 import pylab as pl
 import numpy as np
 from nifty import *
-from scipy.optimize import fmin_l_bfgs_b
+from scipy.optimize import minimize
 from operators import *
 import resolve as rs
 
 
-def BFGS_ham(x0,j, S, M, rho0,params,xdomain):
-    args = (j, S, M, rho0,params)
-    x = field(xdomain,val=x0)
-    en = energy(args)
-    return en.H(x)
-
-def BFGS_grad(x0,j, S, M, rho0,params,xdomain):
-    args = (j, S, M, rho0,params)
-    x = field(xdomain,val=x0)
-    en = energy(args)
-    return en.gradH(x).val.flatten() * xdomain.vol.prod()
-
-
-def BFGS(x0,j,S,M,rho0,params,limii=10):
+def Energy_cal(x0,en,params,xdomain,mid=0,end=0,pure=''):
 
     if params.algorithm == 'ln-map':
+        x = field(xdomain,val=x0)
+        return en.H(x), en.gradH(x).val.flatten() * xdomain.vol.prod()
+        
+    elif pure == 'pure_m' and params.algorithm == 'ln-map_u':         
+        x = field(xdomain,val=x0)
+        E,g =en.egg_s(x)
+        return E, g.val.flatten() * xdomain.vol.prod()
 
-        res = fmin_l_bfgs_b(BFGS_ham,(x0).val.flatten(),fprime=BFGS_grad,\
-            args=(j,S,M,rho0,params,x0.domain),pgtol=1.e-10,factr=10,\
-            maxiter=limii,callback=callbackbfgs)[0]
+    elif pure == 'pure_u' and params.algorithm == 'ln-map_u':
+        x = field(xdomain,val=x0)
+        E,g =en.egg_u(x)
+        return E, g.val.flatten() * xdomain.vol.prod()
+        
+    elif params.algorithm == 'ln-map_u':        
+             
+        sval =np.array(mid)  
+        uval =np.array(mid)  
+        sval = x0[0:mid]    
+        uval = x0[mid:end]
+        s = field(xdomain, val = sval)
+        u = field(xdomain, val = uval)
+  
+        gs = en.gradH_s(s,u)
+        gu = en.gradH_u(s,u)
+        E = en.H(s,u)
+        
+        g=np.ones(end)    
+        gsval = gs.val.flatten()* xdomain.vol.prod()
+        guval = gu.val.flatten()* xdomain.vol.prod()
+        g[0:mid] =gsval
+        g[mid:end] =guval
 
-        return field(x0.domain,target=x0.target,val=res)
+        return E,g
+
+def Energy_min(x0,en,params,numparams,min_method='BFGS',limii=10, x1 = None,pure=''): 
+    
+    call = callbackclass(params.save,min_method,params.callback)      
+    if params.algorithm == 'ln-map':
+
+        res = minimize(Energy_cal,(x0).val.flatten(),\
+            args=(en,params,x0.domain),method = min_method,jac = True,\
+            options={"maxiter":limii},callback=call.callbackscipy)
+
+        return field(x0.domain,target=x0.target,val=res.x)
+        
+    elif params.algorithm == 'ln-map_u' and pure:
+        
+        res = minimize(Energy_cal,x0,args=(en,params,x0.domain,0,0,pure),\
+            method = min_method,jac = True,\
+            options={"maxiter":limii},callback=call.callbackscipy)    
+            
+        return field(x0.domain,target=x0.target,val=res.x) 
+            
+    elif params.algorithm == 'ln-map_u':
+        
+        mid =params.imsize*params.imsize
+        end =2*params.imsize*params.imsize        
+        X = np.ones(end) 
+        mval = x0.val.flatten()
+        uval = x1.val.flatten()
+        X[0 :mid] = mval
+        X[mid:end] = uval
+        
+        res = minimize(Energy_cal,X,args=(en,params,x0.domain,mid,end),\
+            method = min_method,jac = True,\
+            options={"maxiter":limii},callback=call.callbackscipy)            
+            
+        mval =res.x[0:mid] 
+        uval =res.x[mid:end]
+        m = field(x0.domain,target=x0.target,val=mval)
+        u = field(x0.domain,target=x0.target,val=uval)
+
+        return m, u
+                
     else:
         print 'WARNING, BFGS only available yet for standard resolve'
 
@@ -80,51 +135,102 @@ def convert_RES_to_CASA(imagearray_fromRES,FITS=False):
         return np.rot90(np.transpose(imagearray_fromRES),-1)
         #return imagearray_fromRES
 
-def callbackfunc(x, i):
+class callbackclass(object):
     
-    if i%gcallback == 0:
-        print ' Callback at iteration' + str(i)
+    def __init__(self, save,method,callback):
         
-        if gsave:
-           pl.figure()
-           pl.imshow(exp(x))
-           pl.colorbar()
-           pl.title('Iteration' + str(i))
-           pl.savefig('resolve_output_' + str(gsave)+ \
-               "/last_iterations/" + 'iteration'+str(i))
-           np.save('resolve_output_' + str(gsave)+ \
-                   "/last_iterations/" + 'iteration' + str(i),exp(x))
-           pl.close()
+        self.iter = 0
+        self.savename = save
+        self.method = method
+        self.callback = callback
+        
+    def callbackscipy(self,x):
+        
+        if self.iter%self.callback == 0:
+            print 'Callback at iteration' + str(self.iter) 
+            np.save("resolve_output_"+str(self.savename)+"/last_iterations/iteration"\
+                +str(self.iter)+"_"+self.method,exp(x))
+        self.iter += 1
+        
+    def callbackfunc(self,x, i):
+    
+        if i%self.callback == 0:
+            print ' Callback at iteration' + str(i)
+        
+            if self.savename:
+                pl.figure()
+                pl.imshow(exp(x))
+                pl.colorbar()
+                pl.title('Iteration' + str(i))
+                pl.savefig('resolve_output_' + str(self.savename)+ \
+                    "/last_iterations/" + 'iteration'+str(i))
+                np.save('resolve_output_' + str(self.savename)+ \
+                    "/last_iterations/" + 'iteration' + str(i),exp(x))
+                pl.close()
+                
+    def callbackfunc_u(self,x, i):
+    
+        if i%self.callback == 0:
+            print 'Callback at point source iteration' + str(i) 
+        
+            if self.savename:
+               pl.figure()
+               pl.imshow(exp(x))
+               pl.colorbar()
+               pl.title('Iteration' + str(i)+'_u')
+               pl.savefig("resolve_output_"+ str(self.savename)+"/last_iterations/iteration"+str(i)+"_expu")
+               np.save("resolve_output_"+ str(self.savename)+"/last_iterations/iteration"+str(i)+"_expu",exp(x))
+               pl.close()
                
-def callbackfunc_u(x, i):
+    def callbackfunc_m(self,x, i):
     
-    if i%gcallback == 0:
-        print 'Callback at point source iteration' + str(i) 
+        if i%self.callback == 0:
+            print 'Callback at extended source iteration' + str(i) 
         
-        if gsave:
-           pl.figure()
-           pl.imshow(exp(x))
-           pl.colorbar()
-           pl.title('Iteration' + str(i)+'_u')
-           pl.savefig("resolve_output_"+ str(gsave)+"/last_iterations/iteration"+str(i)+"_expu")
-           np.save("resolve_output_"+ str(gsave)+"/last_iterations/iteration"+str(i)+"_expu",exp(x))
+            if self.savename:
+                pl.figure()
+                pl.imshow(exp(x))
+                pl.colorbar()
+                pl.title('Iteration' + str(i)+'_m')
+                pl.savefig("resolve_output_"+ str(self.savename)+"/last_iterations/iteration"+str(i)+"_expm")
+                np.save("resolve_output_"+ str(self.savename)+"/last_iterations/iteration"+str(i)+"_expm",exp(x))
+                pl.close() 
+
+
+def save_u(x,git,params):
+    save_results(exp(x.val), "map, iter #" + str(git), \
+        'resolve_output_' + params.save +\
+        '/u_reconstructions/' + params.save + "_expu"+ str(git), \
+        rho0 = params.rho0)
+    rs.write_output_to_fits(np.transpose(exp(x.val)*params.rho0),params,\
+        notifier = str(git), mode='I_u')    
+            
+def save_m(x,git,params,w_git=0):
+        
+    if params.freq == 'wideband':
+        save_results(exp(x.val), "map, iter #" + str(git), \
+            'resolve_output_' + str(params.save) +\
+            '/m_reconstructions/' + params.save + "_expm" +\
+            str(wideband_git) + "_" + str(git), rho0 = params.rho0)
+        rs.write_output_to_fits(np.transpose(exp(m.val)*params.rho0),params, \
+            notifier = str(w_git) + "_" + str(git),mode = 'I')
                
-def callbackfunc_m(x, i):
-    
-    if i%gcallback == 0:
-        print 'Callback at extended source iteration' + str(i) 
+    else:            
+        save_results(exp(x.val), "map, iter #" + str(git), \
+            'resolve_output_' + params.save +\
+            '/m_reconstructions/' + params.save+ "_expm" + str(git), \
+        rho0 = params.rho0)
+        rs.write_output_to_fits(np.transpose(exp(x.val)*params.rho0),params,\
+            notifier = str(git), mode='I')  
+            
+def save_mu(m,u,git,params):
+    save_results(exp(u.val)+exp(m.val), "map, iter #" + str(git), \
+        'resolve_output_' + str(params.save) +\
+        '/mu_reconstructions/' + params.save + "_expmu"+ str(git), \
+        rho0 = params.rho0)
+    rs.write_output_to_fits(np.transpose((exp(u.val)+exp(m.val))*params.rho0),params,\
+        notifier = str(git), mode='I_mu')       
         
-        if gsave:
-           pl.figure()
-           pl.imshow(exp(x))
-           pl.colorbar()
-           pl.title('Iteration' + str(i)+'_m')
-           pl.savefig("resolve_output_"+ str(gsave)+"/last_iterations/iteration"+str(i)+"_expm")
-           np.save("resolve_output_"+ str(gsave)+"/last_iterations/iteration"+str(i)+"_expm",exp(x))
-
-def callbackbfgs(x):
-
-    np.save("resolve_output_"+ str(gsave)+"/last_iterations/iteration"+"_lbfgs",exp(x))
 
 def save_results(value,title,fname,log = None,value2 = None, \
     value3= None, plotpar = None, rho0 = 1., twoplot=False):
@@ -239,7 +345,7 @@ def log(x,base=None):
         if(isinstance(x,field)):
 #            if(np.any(x.val<1E-323)):
 #                print("** LOGSTROKE **")
-            return field(x.domain,val=np.log(np.maximum(1E-323,x.val))/np.log(base).astype(x.domain.datatype),target=x.target)
+            return field(x.domain,val=utils.log(np.maximum(1E-323,x.val))/np.log(base).astype(x.domain.datatype),target=x.target)
             #return field(x.domain,val=np.log(x.val)/np.log(base).astype(x.domain.datatype),target=x.target)
         else:
 #            if(np.any(x<1E-323)):
