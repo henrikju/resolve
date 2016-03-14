@@ -81,12 +81,12 @@ def simulate(params, simparams, logger):
             str(params.save) + "/general/" + params.save + '_expsimIp')
             
     #temporary
-    startu = Ip
-    startu[np.where(startu < 10)] = 1e-10
-    np.random.seed(1234)
-    startu[np.where(startu >= 10)] = startu[np.where(startu >= 10)]*np.random.random()*2
-    np.random.seed()
-    np.save('startu_test',startu)
+    #startu = Ip.copy()
+    #startu[np.where(startu < 10)] = 1e-10
+    #np.random.seed(1234)
+    #startu[np.where(startu >= 10)] = startu[np.where(startu >= 10)]*np.random.random()*2
+    #np.random.seed()
+    #np.save('startu_test',startu)
     #temporary
 
     # maximum k-mode and resolution of data
