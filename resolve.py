@@ -187,7 +187,7 @@ def resolve(params, numparams):
         '/D_reconstructions'):
             os.makedirs('resolve_output_' + str(params.save)+\
             '/D_reconstructions')
-    if params.init_type_s == 'fastResolve':
+    if (params.init_type_s == 'fastResolve' or params.algorithm == 'fastResolve'):
        if not os.path.exists('resolve_output_' + str(params.save)+\
         '/fastresolve'):
             os.makedirs('resolve_output_' + str(params.save)+\
@@ -209,21 +209,15 @@ def resolve(params, numparams):
     for par in vars(numparams).items():
         logger.message(str(par[0])+' = '+str(par[1]),verb_level=2)
     
-    
     # Data setup
     if params.simulating:
-        d, N, R, di, d_space, s_space, expI, n = sim.simulate(params, simparams, \
+        d, N, R, di, d_space, s_space, expI, n = simulate(params, simparams, \
             logger)
         
     else:
         d, N, R, di, d_space, s_space = datasetup(params, logger)
-    
-    # Starting guess setup    
-    # Check whether to do FastResolve for the starting guess, only for ln-map
-    if params.init_type_s == 'fastResolve':
-        m_s, pspec, k_space = ra.fastresolve(R, d, numparams.SNR_assumed, s_space, 'resolve_output_'+params.save+'/fastresolve/', do_point=False)
-    
-    else:
+
+    if not params.init_type_s == 'fr_internal':
         # Standard Starting guesses setup
         if ((params.algorithm == ('ln-map') or params.algorithm == ('wf')) and (params.freq != 'wideband')):
             m_s, pspec, params, k_space = starting_guess_setup(params, logger, s_space, d_space)
@@ -235,14 +229,32 @@ def resolve(params, numparams):
             m_s, pspec, m_a, pspec_a, params, k_space = starting_guess_setup(params, logger, s_space, d_space)
     
         elif (params.algorithm == 'ln-map_u') and (params.freq == 'wideband'):
-            m_s, pspec, m_u, m_a, pspec_a, params, k_space = starting_guess_setup(params, logger, s_space, d_space)        
+            m_s, pspec, m_u, m_a, pspec_a, params, k_space = starting_guess_setup(params, logger, s_space, d_space)
+            
+    # Starting guess setup    
+    # Check whether to do FastResolve for the starting guess, only for ln-map
+    if algorithm == 'prefastResolve':
+        if params.init_type_s == 'fr_internal':
+            m_s = 'fr_internal'
+        if params.init_type_p == 'fr_internal':
+            pspec = 'fr_internal'
+        m_s, pspec, k_space = ra.fastresolve(R, d, s_space, 'resolve_output_'+params.save+'/fastresolve/', noise_update=params.noise_update, noise_est=params.noise_est, msg=m_s, psg=pspec, point=500)
               
     # Begin: Start Filter *****************************************************
     
     if params.stokes != 'I':
         logger.failure('Pol-RESOLVE not yet implemented.')
         raise NotImplementedError('Pol-RESOLVE not yet implemented.')
-
+        
+    if params.algorithm == 'onlyfastResolve':
+       
+        logger.header2('\nStarting only fastRESOLVE reconstruction.')
+        t1 = time()
+        m_s, p_I, k_space = ra.fastresolve(R, d, s_space, 'resolve_output_'+params.save+'/fastresolve/', point=1000)
+        t2 = time()
+        logger.success("Completed algorithm.")
+        logger.message("Time to complete: " + str((t2 - t1) / 3600.) + ' hours.')
+        
     if params.algorithm == 'ln-map':
 
         logger.header2('\nStarting standard RESOLVE reconstruction.')
@@ -256,6 +268,8 @@ def resolve(params, numparams):
             logger.success("Completed uncertainty map calculation.")
             logger.message("Time to complete: " + str((t2 - t1) / 3600.) + ' hours.')
             sys.exit(0)
+            
+        
 
         if params.freq != 'wideband':
 
@@ -490,7 +504,7 @@ def datasetup(params, logger):
     #Non-WSclean (i.e. standard) loading routines
     else:
     
-        vis, sigma, u, v, freqs, nchan, nspw, nvis, params.summary = \
+        vis, sigma, u, v, flags, freqs, nchan, nspw, nvis, params.summary = \
             utils.load_numpy_data(params.ms, logger)
     
     # definition of wideband data operators
@@ -596,16 +610,26 @@ def datasetup(params, logger):
         if not params.ftmode == 'wsclean':
             sspw,schan = params.freq[0], params.freq[1]
             vis = vis[sspw][schan]
-            sigma = sigma[sspw][schan]
+            sigma = sigma[sspw]
             u = u[sspw][schan]
-            v = v[sspw][schan]        
-        
+            v = v[sspw][schan] 
+            flags = flags[sspw][schan]
+            
+            
+            # cut away flagged data
+            vis = np.delete(vis,np.where(flags)==0)
+            u = np.delete(u,np.where(flags)==0)
+            v = np.delete(v,np.where(flags)==0)
+            sigma = np.delete(sigma,np.where(flags)==0)
+            
+
         # Dumb simple estimate can be done now after reading in the data.
         # No time information needed.
         if params.noise_est == 'simple':
             
             variance = np.var(np.array(vis))*np.ones(np.shape(np.array(vis)))\
                 .flatten()
+        
         elif params.noise_est == 'SNR_assumed':
             
             variance = np.ones(np.shape(sigma))*np.mean(np.abs(vis*vis))/(1.+numparams.SNR_assumed)
@@ -692,8 +716,11 @@ def starting_guess_setup(params, logger, s_space, d_space):
             m_s = field(s_space, target=s_space.get_codomain(), \
                 val=np.load(params.init_type_s))
         else:
+            expm_s_val = np.abs(np.load(params.init_type_s))
+            expm_s_val[expm_s_val==0] = 1e-12
             m_s = field(s_space, target=s_space.get_codomain(), \
-                val=log(np.abs(np.load(params.init_type_s))))
+                val=log(expm_s_val))
+            del expm_s_val    
     
     # Optional starting guesses for m_u
             
@@ -949,13 +976,17 @@ def mapfilter_I(d, m, pspec, N, R, logger, k_space, params, numparams,\
                 rho0 = params.rho0)
             write_output_to_fits(np.transpose(exp(m.val)*params.rho0),params,\
                 notifier = str(git), mode='I')
+                
 
         # check whether to do ecf-like noise update
-        if params.noise_update:
-            
+        if (params.noise_update and (git==1 or git%3==0)):          
             # Do a "poor-man's" extended critical filter step using residual
             logger.header2("Trying simple noise estimate without any D.")
-            newvar = (abs(d - R(exp(m)))**2).mean()
+            #newvar = ((d - R(exp(m)))**2).mean()
+            REG_VAR = 0.9
+            est_var = (R(exp(m)) - d).val
+            est_var = np.abs(est_var)**2
+            est_var = REG_VAR*est_var + (1-REG_VAR)*est_var.mean()
             logger.message('old variance iteration '+str(git-1)+':' + str(N.diag()))
             logger.message('new variance iteration '+str(git)+':' + str(newvar))
             np.save('resolve_output_' + str(params.save) + '/general/oldvar_'+str(git),N.diag())
@@ -965,6 +996,8 @@ def mapfilter_I(d, m, pspec, N, R, logger, k_space, params, numparams,\
             np.save('resolve_output_' + str(params.save) +'/general/absRmmean_'\
                 +str(git),abs(R(exp(m)).val*R.target.num()).mean())
             N.para = [newvar*np.ones(np.shape(N.diag()))]
+            M = M_operator(domain=s_space, sym=True, imp=True, para=[N, R])
+            j = R.adjoint_times(N.inverse_times(d))
 
         # Check whether to do the pspec iteration
         if params.pspec:
