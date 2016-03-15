@@ -10,6 +10,8 @@ RESOLVE is a Bayesian inference algorithm for image reconstruction in radio inte
 
 For the moment, the algorithm won't perform optimally under the presence of strong point sources and with wide field data.
 
+ATTENTION: The newest release (March 15, 2016) included a major overhaul for which this description is not suitable any more. An update of the description will follow soon.
+
 --------------------------------------------------------------------------------------------------------------------------------
 Quick installation guide
 --------------------------------------------------------------------------------------------------------------------------------
