@@ -141,7 +141,7 @@ def fastresolve(R, d, s_space, path, noise_update=False, noise_est='fr_internal'
             np.save(path+"cycle2_m_%02i.npy"%ii, m.val)
             np.save(path+"cycle2_est_var_%02i.npy"%ii, est_var)
 
-
+    return m, S.get_power(), k_space
 	
 				
 def ext_point_cycle(limii=50):
