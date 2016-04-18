@@ -209,7 +209,7 @@ def resolve(params, numparams):
     
     # Data setup
     if params.simulating:
-        d, N, R, di, d_space, s_space, expI, n = simulate(params, simparams, \
+        d, N, R, di, d_space, s_space, expI, n = sim.simulate(params, simparams, \
             logger)
         
     else:
