@@ -135,6 +135,44 @@ def convert_RES_to_CASA(imagearray_fromRES,FITS=False):
         return np.rot90(np.transpose(imagearray_fromRES),-1)
         #return imagearray_fromRES
 
+def uncertainty_functions(m,Dhat,smooth=0.):
+    
+    
+    Dhat /= Dhat.domain.vol.prod()
+    
+    save_results(Dhat.val,"D", \
+                'resolve_output_' + str(params.save) +\
+                "/D_reconstructions/" + params.save + "_D")
+    
+    #Dhat smoothing            
+    Dhat = Dhat.smooth(sigma=smooth)
+    save_results(Dhat.val,"Dsmooth", \
+                'resolve_output_' + str(params.save) +\
+                "/D_reconstructions/" + params.save + "_Dsmooth")
+    
+    #Relative uncertainty under Saddlepoint approximation
+    relun = np.sqrt(exp(Dhat)-1)
+    save_results(relun,"relative uncertainty", \
+                'resolve_output_' + str(params.save) +\
+                "/D_reconstructions/" + params.save + "_relun")
+    
+    #Absolute Uncertainty under Saddlepoint approximation
+    absun = exp(m) * relun
+    save_results(absun.val,"absolute uncertainty", \
+                'resolve_output_' + str(params.save) +\
+                "/D_reconstructions/" + params.save + "_absun")
+                
+    #Max/Min value starting from Gaussian field variance
+    maxval = exp(m+sqrt(Dhat))
+    minval = exp(m-sqrt(Dhat))
+    save_results(maxval,"maximum exponentiated Gaussian field", \
+                'resolve_output_' + str(params.save) +\
+                "/D_reconstructions/" + params.save + "_maxval")
+    save_results(minval,"minimum exponentiated Gaussian field", \
+                'resolve_output_' + str(params.save) +\
+                "/D_reconstructions/" + params.save + "_minval")
+
+
 class callbackclass(object):
     
     def __init__(self, save,method,callback):

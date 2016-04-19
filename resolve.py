@@ -209,7 +209,7 @@ def resolve(params, numparams):
     
     # Data setup
     if params.simulating:
-        d, N, R, di, d_space, s_space, expI, n = simulate(params, simparams, \
+        d, N, R, di, d_space, s_space, expI, n = sim.simulate(params, simparams, \
             logger)
         
     else:
@@ -231,7 +231,7 @@ def resolve(params, numparams):
             
     # Starting guess setup    
     # Check whether to do FastResolve for the starting guess, only for ln-map
-    if algorithm == 'prefastResolve':
+    if params.algorithm == 'prefastResolve':
         if params.init_type_s == 'fr_internal':
             m_s = 'fr_internal'
         if params.init_type_p == 'fr_internal':
@@ -243,6 +243,7 @@ def resolve(params, numparams):
     if params.stokes != 'I':
         logger.failure('Pol-RESOLVE not yet implemented.')
         raise NotImplementedError('Pol-RESOLVE not yet implemented.')
+        
         
     if params.algorithm == 'onlyfastResolve':
        
@@ -1930,6 +1931,7 @@ class numparameters(object):
         self.check_default('map_iter', parset, 100, dtype = int)
         self.check_default('final_convlevel', parset, 4, dtype = float)
         self.check_default('viscol', parset, 'data')
+        self.check_default('bins', parset, 70, dtype = float)
         if params.noise_est == 'SNR_assumed':
             self.check_default('SNR_assumed',parset,1,dtype = float)
         if params.init_type_s != ('const' or 'dirty'):
@@ -1942,7 +1944,6 @@ class numparameters(object):
             self.check_default('pspec_algo', parset, 'cg')
             self.check_default('smoothing', parset, 10, dtype = float)
             self.check_default('M0_start', parset, 0, dtype = float)
-            self.check_default('bins', parset, 70, dtype = float)
             self.check_default('p0', parset, 1, dtype = float)
             self.check_default('pspec_tol', parset, 1e-3, dtype = float)
             self.check_default('pspec_clevel', parset, 3, dtype = float)
@@ -2023,7 +2024,6 @@ def parse_input_file(parsetfn, save, verbosity):
     parset = dict()
 
     # File must fulfil: No whitespaces beyond variables; no free lines;
-    # one whitespace to set variables to False
     for row in reader:
         if len(row) != 0 and row[0] != '%' and len(row)>2:
             st = row[1]
