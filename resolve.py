@@ -231,7 +231,7 @@ def resolve(params, numparams):
             
     # Starting guess setup    
     # Check whether to do FastResolve for the starting guess, only for ln-map
-    if algorithm == 'prefastResolve':
+    if params.algorithm == 'prefastResolve':
         if params.init_type_s == 'fr_internal':
             m_s = 'fr_internal'
         if params.init_type_p == 'fr_internal':
