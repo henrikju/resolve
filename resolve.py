@@ -218,16 +218,16 @@ def resolve(params, numparams):
     if not params.init_type_s == 'fr_internal':
         # Standard Starting guesses setup
         if ((params.algorithm == ('ln-map') or params.algorithm == ('wf')) and (params.freq != 'wideband')):
-            m_s, pspec, params, k_space = starting_guess_setup(params, logger, s_space, d_space)
+            m_s, pspec, params, k_space = starting_guess_setup(params, logger, s_space, d_space, di)
             
         elif ((params.algorithm == 'ln-map_u') and (params.freq != 'wideband')):
-            m_s, pspec, m_u, params, k_space = starting_guess_setup(params, logger, s_space, d_space)
+            m_s, pspec, m_u, params, k_space = starting_guess_setup(params, logger, s_space, d_space, di)
     
         elif (params.algorithm == 'ln-map') and (params.freq == 'wideband'):
-            m_s, pspec, m_a, pspec_a, params, k_space = starting_guess_setup(params, logger, s_space, d_space)
+            m_s, pspec, m_a, pspec_a, params, k_space = starting_guess_setup(params, logger, s_space, d_space, di)
     
         elif (params.algorithm == 'ln-map_u') and (params.freq == 'wideband'):
-            m_s, pspec, m_u, m_a, pspec_a, params, k_space = starting_guess_setup(params, logger, s_space, d_space)
+            m_s, pspec, m_u, m_a, pspec_a, params, k_space = starting_guess_setup(params, logger, s_space, d_space, di)
             
     # Starting guess setup    
     # Check whether to do FastResolve for the starting guess, only for ln-map
@@ -700,7 +700,7 @@ def datasetup(params, logger):
         return  d, N, R, di, d_space, s_space
     
 
-def starting_guess_setup(params, logger, s_space, d_space):
+def starting_guess_setup(params, logger, s_space, d_space, di):
     
     # Starting guesses for m_s
     
