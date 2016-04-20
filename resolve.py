@@ -616,10 +616,10 @@ def datasetup(params, logger):
             
             
             # cut away flagged data
-            vis = np.delete(vis,np.where(flags)==0)
-            u = np.delete(u,np.where(flags)==0)
-            v = np.delete(v,np.where(flags)==0)
-            sigma = np.delete(sigma,np.where(flags)==0)
+            vis = np.delete(vis,np.where(flags==0))
+            u = np.delete(u,np.where(flags==0))
+            v = np.delete(v,np.where(flags==0))
+            sigma = np.delete(sigma,np.where(flags==0))
             
 
         # Dumb simple estimate can be done now after reading in the data.
