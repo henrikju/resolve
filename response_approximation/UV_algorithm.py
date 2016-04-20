@@ -57,6 +57,7 @@ def fastresolve(R, d, s_space, path, noise_update=False, noise_est='fr_internal'
     else:
         # take starting guess power spectrum from main routine
         spec = psg
+	S = power_operator(k_space, spec=spec)
 	
     if msg=='fr_internal':
         m_matched = UV_quants.get_matched()
@@ -75,6 +76,12 @@ def fastresolve(R, d, s_space, path, noise_update=False, noise_est='fr_internal'
         # take starting guess map from main routine
         global m
         m = msg
+        global RR
+        global NN
+        global dd
+        RR = UV_quants.get_RR()
+        NN = UV_quants.get_NN()
+        dd = UV_quants.get_dd()
 
     global Ipoint		
     Ipoint = field(s_space, target=k_space, val=0.)
