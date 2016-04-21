@@ -185,7 +185,7 @@ def resolve(params, numparams):
         '/D_reconstructions'):
             os.makedirs('resolve_output_' + str(params.save)+\
             '/D_reconstructions')
-    if (params.init_type_s == 'fastResolve' or params.algorithm == 'fastResolve'):
+    if (params.init_type_s == 'fastResolve' or params.algorithm == 'prefastResolve' or params.algorithm == 'onlyfastResolve'):
        if not os.path.exists('resolve_output_' + str(params.save)+\
         '/fastresolve'):
             os.makedirs('resolve_output_' + str(params.save)+\
