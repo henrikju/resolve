@@ -209,7 +209,7 @@ def resolve(params, numparams):
     
     # Data setup
     if params.simulating:
-        d, N, R, di, d_space, s_space, expI, n, sim_powspec = sim.simulate(params, numparams,simparams, \
+        d, N, R, di, d_space, s_space, expI, n, sim_powspec = sim.simulate(params, simparams, \
             logger)
         np.save('resolve_output_' + str(params.save)+'/general/data',d.val)
         
@@ -219,16 +219,16 @@ def resolve(params, numparams):
     if not params.init_type_s == 'fr_internal':
         # Standard Starting guesses setup
         if ((params.algorithm == ('ln-map') or params.algorithm == ('wf')) and (params.freq != 'wideband')):
-            m_s, pspec, params, k_space = starting_guess_setup(params, logger, s_space, d_space)
+            m_s, pspec, params, k_space = starting_guess_setup(params, logger, s_space, d_space, di)
             
         elif ((params.algorithm == 'ln-map_u') and (params.freq != 'wideband')):
-            m_s, pspec, m_u, params, k_space = starting_guess_setup(params, logger, s_space, d_space)
+            m_s, pspec, m_u, params, k_space = starting_guess_setup(params, logger, s_space, d_space, di)
     
         elif (params.algorithm == 'ln-map') and (params.freq == 'wideband'):
-            m_s, pspec, m_a, pspec_a, params, k_space = starting_guess_setup(params, logger, s_space, d_space)
+            m_s, pspec, m_a, pspec_a, params, k_space = starting_guess_setup(params, logger, s_space, d_space, di)
     
         elif (params.algorithm == 'ln-map_u') and (params.freq == 'wideband'):
-            m_s, pspec, m_u, m_a, pspec_a, params, k_space = starting_guess_setup(params, logger, s_space, d_space)
+            m_s, pspec, m_u, m_a, pspec_a, params, k_space = starting_guess_setup(params, logger, s_space, d_space, di)
             
     # Starting guess setup    
     # Check whether to do FastResolve for the starting guess, only for ln-map
@@ -244,6 +244,7 @@ def resolve(params, numparams):
     if params.stokes != 'I':
         logger.failure('Pol-RESOLVE not yet implemented.')
         raise NotImplementedError('Pol-RESOLVE not yet implemented.')
+        
         
     if params.algorithm == 'onlyfastResolve':
        
@@ -632,10 +633,10 @@ def datasetup(params, logger):
             
             
             # cut away flagged data
-            vis = np.delete(vis,np.where(flags)==0)
-            u = np.delete(u,np.where(flags)==0)
-            v = np.delete(v,np.where(flags)==0)
-            sigma = np.delete(sigma,np.where(flags)==0)
+            vis = np.delete(vis,np.where(flags==0))
+            u = np.delete(u,np.where(flags==0))
+            v = np.delete(v,np.where(flags==0))
+            sigma = np.delete(sigma,np.where(flags==0))
             
 
         # Dumb simple estimate can be done now after reading in the data.
@@ -716,7 +717,7 @@ def datasetup(params, logger):
         return  d, N, R, di, d_space, s_space
     
 
-def starting_guess_setup(params, logger, s_space, d_space):
+def starting_guess_setup(params, logger, s_space, d_space, di):
     
     # Starting guesses for m_s
     
@@ -1953,6 +1954,7 @@ class numparameters(object):
         self.check_default('map_iter', parset, 100, dtype = int)
         self.check_default('final_convlevel', parset, 4, dtype = float)
         self.check_default('viscol', parset, 'data')
+        self.check_default('bins', parset, 70, dtype = float)
         if params.noise_est == 'SNR_assumed':
             self.check_default('SNR_assumed',parset,1,dtype = float)
         if params.init_type_s != ('const' or 'dirty'):
@@ -1965,7 +1967,6 @@ class numparameters(object):
             self.check_default('pspec_algo', parset, 'cg')
             self.check_default('smoothing', parset, 10, dtype = float)
             self.check_default('M0_start', parset, 0, dtype = float)
-            self.check_default('bins', parset, 70, dtype = float)
             self.check_default('p0', parset, 1, dtype = float)
             self.check_default('pspec_tol', parset, 1e-3, dtype = float)
             self.check_default('pspec_clevel', parset, 3, dtype = float)
@@ -2046,7 +2047,6 @@ def parse_input_file(parsetfn, save, verbosity):
     parset = dict()
 
     # File must fulfil: No whitespaces beyond variables; no free lines;
-    # one whitespace to set variables to False
     for row in reader:
         if len(row) != 0 and row[0] != '%' and len(row)>2:
             st = row[1]
