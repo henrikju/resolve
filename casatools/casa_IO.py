@@ -33,7 +33,7 @@ PI = 3.14159265358979323846
 
 #General purpose routine for MS-IO using CASA
 def read_data_from_ms(msfn, viscol="DATA", noisecol='SIGMA',
-                      mode='tot',noise_est = False):
+                      mode='tot',noise_est = False,cross_pol=True):
     """
     Reads polarization or total intensity data in visibility and noise arrays.
 
@@ -141,18 +141,21 @@ def read_data_from_ms(msfn, viscol="DATA", noisecol='SIGMA',
             flags = 1. - ms.getdata(["flag"])['flag']
 
             if mode == 'tot':
-                if not(np.sum(flags[0])==np .sum(flags[3])):
-                   m.warn('Warning: Different flags for ' \
-                   +'different correlations/channels. '\
-                   +'Hard flag is applied: If any necessary'\
-                   +'correlation is flagged, this gets '\
-                   +'extended to all.')
-                   flag = np.ones(np.shape(flags[0]))
-                   flag[flags[0]==0.] == 0.
-                   flag[flags[3]==0.] == 0.
+                if len(flags) > 2:
+                    if not(np.sum(flags[0])==np.sum(flags[3])):
+                       m.warn('Warning: Different flags for ' \
+                       +'different correlations/channels. '\
+                       +'Hard flag is applied: If any necessary'\
+                       +'correlation is flagged, this gets '\
+                       +'extended to all.')
+                       flag = np.ones(np.shape(flags[0]))
+                       flag[flags[0]==0.] == 0.
+                       flag[flags[3]==0.] == 0.
                          
+                    else:
+                        flag = flags[0]
                 else:
-                    flag = flags[0]
+                    flag = flags[0]    
                     
             elif mode == 'pol':
                 if not(np.sum(flags[1])==np .sum(flags[2])):
@@ -170,13 +173,19 @@ def read_data_from_ms(msfn, viscol="DATA", noisecol='SIGMA',
             #Start reading data.
 
             if mode == 'tot': 
-                vis_temp = (Spart[0] * data_temp[0]\
-                    + Spart[1] * data_temp[1] + Spart[2] *\
-                    data_temp[2] + Spart[3] * data_temp[3])
-                sigma_temp = (Spart[0] * s_temp[0]\
-                    + Spart[1] * s_temp[1] + Spart[2] *\
-                    + s_temp[2] + Spart[3] * s_temp[3])
-
+                if cross_pol:
+                    vis_temp = (Spart[0] * data_temp[0]\
+                        + Spart[1] * data_temp[1] + Spart[2] *\
+                        data_temp[2] + Spart[3] * data_temp[3])
+                    sigma_temp = (Spart[0] * s_temp[0]\
+                        + Spart[1] * s_temp[1] + Spart[2] *\
+                        + s_temp[2] + Spart[3] * s_temp[3])
+                else:
+                    vis_temp = (Spart[0] * data_temp[0]\
+                        + Spart[1] * data_temp[1])
+                    sigma_temp = (Spart[0] * s_temp[0]\
+                        + Spart[1] * s_temp[1])
+                        
                 vis.append(vis_temp)
                 sigma.append(sigma_temp)
 
@@ -520,7 +529,7 @@ def simulate_ms_file(modelimage, msname, instrumentmodel):
         instrumentmodel: instrument model file for the fictious interferometer. 
     """
 
-    simobserve(project=msname,skymodel=modelimage,antennalist=instrumentmodel)
+    ms.simobserve(project=msname,skymodel=modelimage,antennalist=instrumentmodel)
 
 def computenoise(meta, nspw):
     

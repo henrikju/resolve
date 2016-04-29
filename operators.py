@@ -273,6 +273,11 @@ class energy_mu(object):
         
 class Dmu_operator(operator):
     """
+    Umbenennen um klarer zu machen das dies die 2fache ableitung
+    von H nach m ist?
+    
+    Nur params uebergeben oder nur [params.eta ,params.M0, params.rho0] uebergeben
+    beides zu uebergeben ist unnoetig
     """
 
     def _inverse_multiply(self, x):
@@ -326,6 +331,65 @@ class Dmu_operator(operator):
                 limii=numparams.pspec_iter)
                     
         return x_
+
+class Duu_operator(operator):
+    """
+    Umbenennen um klarer zu machen das dies die 2fache ableitung
+    von H nach u ist?
+    
+    Nur params uebergeben oder nur [params.eta ,params.M0, params.rho0] uebergeben
+    beides zu uebergeben ist unnoetig
+    """
+
+    def _inverse_multiply(self, x):
+        """
+        """
+
+        S = self.para[0]
+        M = self.para[1]
+        m = self.para[2]
+        j = self.para[3]
+        M0 = self.para[4]
+        rho0 = self.para[5]
+        u =self.para[6]
+        params = self.para[7]
+        
+        I = field(domain = x.domain, val = rho0 * (exp(m)+exp(u)))
+
+        nondiagpart = M_part_operator(M.domain, imp=True, para=[M, u, rho0])
+        
+        diagpartval = (-1. * j * rho0 * exp(u) + params.eta * exp(-u) + exp(u) * M(I)).hat()  
+
+        part1 = diagpartval(x)
+        part2 = nondiagpart(x)
+
+        return part1 + part2 
+
+    _matvec = (lambda self, x: self.inverse_times(x).val.flatten())
+    
+
+    def _multiply(self, x):
+        """
+        the operator is defined by its inverse, so multiplication has to be
+        done by inverting the inverse numerically using the conjugate gradient
+        method.
+        """
+        convergence = 0
+        numparams = self.para[8]
+        params = self.para[7]
+
+        if numparams.pspec_algo == 'cg':
+            x_,convergence = nt.conjugate_gradient(self._matvec, x, \
+                note=True)(tol=numparams.pspec_tol,clevel=numparams.pspec_clevel,\
+                limii=numparams.pspec_iter)
+                
+        elif numparams.pspec_algo == 'sd':
+            x_,convergence = nt.steepest_descent(self._matvec, x, \
+                note=True)(tol=numparams.pspec_tol,clevel=numparams.pspec_clevel,\
+                limii=numparams.pspec_iter)
+                    
+        return x_
+
 
 #-----------------------wide band operators------------------------------------
 

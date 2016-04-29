@@ -145,5 +145,16 @@ def read_image_from_CASA(casaimagename,zoomfactor, outn):
     image = sci.zoom(image,zoom=zoomfactor)
     np.save(outn,utils.convert_CASA_to_RES(image))
 
+def read_model_from_CASA(casaimagename,zoomfactor, outn):
+
+    ia.open(casaimagename)
+    imageinfo = ia.summary(casaimagename)
+
+    image = ia.getchunk().reshape(imageinfo['shape'][0],imageinfo['shape'][1])\
     
+
+    ia.close()
+    
+    image = sci.zoom(image,zoom=zoomfactor)
+    np.save(outn,utils.convert_CASA_to_RES(image))    
         

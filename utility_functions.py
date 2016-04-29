@@ -67,7 +67,7 @@ def Energy_cal(x0,en,params,xdomain,mid=0,end=0,pure=''):
 
         return E,g
 
-def Energy_min(x0,en,params,numparams,min_method='BFGS',limii=10, x1 = None,pure=''): 
+def Energy_min(x0,en,params,numparams,min_method='L-BFGS-B',limii=10, x1 = None,pure=''): 
     
     call = callbackclass(params.save,min_method,params.callback)      
     if params.algorithm == 'ln-map':

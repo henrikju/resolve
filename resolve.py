@@ -209,12 +209,13 @@ def resolve(params, numparams):
     
     # Data setup
     if params.simulating:
-        d, N, R, di, d_space, s_space, expI, n = simulate(params, simparams, \
+        d, N, R, di, d_space, s_space, expI, n, sim_powspec = sim.simulate(params, numparams,simparams, \
             logger)
+        np.save('resolve_output_' + str(params.save)+'/general/data',d.val)
         
     else:
-        d, N, R, di, d_space, s_space = datasetup(params, logger)
-
+        d, N, R, di, d_space, s_space = datasetup(params, logger) 
+    
     if not params.init_type_s == 'fr_internal':
         # Standard Starting guesses setup
         if ((params.algorithm == ('ln-map') or params.algorithm == ('wf')) and (params.freq != 'wideband')):
@@ -231,7 +232,7 @@ def resolve(params, numparams):
             
     # Starting guess setup    
     # Check whether to do FastResolve for the starting guess, only for ln-map
-    if algorithm == 'prefastResolve':
+    if params.algorithm == 'prefastResolve':
         if params.init_type_s == 'fr_internal':
             m_s = 'fr_internal'
         if params.init_type_p == 'fr_internal':
@@ -239,7 +240,7 @@ def resolve(params, numparams):
         m_s, pspec, k_space = ra.fastresolve(R, d, s_space, 'resolve_output_'+params.save+'/fastresolve/', noise_update=params.noise_update, noise_est=params.noise_est, msg=m_s, psg=pspec, point=500)
               
     # Begin: Start Filter *****************************************************
-    
+            
     if params.stokes != 'I':
         logger.failure('Pol-RESOLVE not yet implemented.')
         raise NotImplementedError('Pol-RESOLVE not yet implemented.')
@@ -455,7 +456,23 @@ def resolve(params, numparams):
                      'resolve_output_' + str(params.save) + \
                      '/p_reconstructions/' + params.save + "_powfinal", \
                      value2 = p_I, log='loglog')
-        
+                     
+        if params.algorithm == 'ln-map_u':     
+            utils.save_results(exp(m_u.val),"exp(Solution u)",\
+                'resolve_output_' + str(params.save) + '/u_reconstructions/' + \
+                params.save + "_expufinal", rho0 = params.rho0)
+            write_output_to_fits(np.transpose(exp(m_u.val)*params.rho0),params, notifier='final',mode='I_u')
+       
+        if params.simulating:
+            pl.figure()
+            pl.loglog(k_space.get_power_indices()[0], p_I, label="final")
+            pl.loglog(k_space.get_power_indices()[0],sim_powspec, label="simulated") 
+            #pl.loglog(k_space.get_power_indices()[0],sim_powspec, label="simulated")
+            pl.title("Compare final and simulated power spectrum")
+            pl.legend()
+            pl.savefig("resolve_output_" + str(params.save) +"/p_reconstructions/"\
+                + params.save + "_compare.png")
+            pl.close()  
 
     # ^^^ End: Some plotting stuff *****************************************^^^
 
@@ -767,15 +784,13 @@ def starting_guess_setup(params, logger, s_space, d_space):
 
     # Basic k-space
     k_space = s_space.get_codomain()
-        
     #Adapts the k-space properties if binning is activated.
-    if numparams.bins:
-        k_space.set_power_indices(log=True, nbins=numparams.bins)
-    
+    #if numparams.bins:
+    #    k_space.set_power_indices(log=True, nbins=numparams.bins)
     # k-space prperties    
-    kindex,rho_k,pindex,pundex = k_space.get_power_indices()
-
+    kindex,rho_k,pindex,pundex = k_space.get_power_indices(log=True, nbins=numparams.bins)
     # Simple k^2 power spectrum with p0 from numpars and a fixed monopole from
+    print len(kindex)
     # the m starting guess
     if params.init_type_p == 'k^2_mon':
         pspec = np.array((1+kindex)**-2 * numparams.p0)
@@ -1132,7 +1147,7 @@ def mapfilter_I_u(d, m,u, pspec, N, R, logger, k_space, params, numparams,\
         M = M_operator(domain=s_space, sym=True, imp=True, para=[N, R])
         j = R.adjoint_times(N.inverse_times(d))
     D = Dmu_operator(domain=s_space, sym=True, imp=True, para=[S, M, m, j, \
-        numparams.M0_start, params.rho0, params, numparams])
+        numparams.M0_start, params.rho0, u, params, numparams])
    
     #diagnostic plots    
     if params.freq == 'wideband':
@@ -1191,8 +1206,12 @@ def mapfilter_I_u(d, m,u, pspec, N, R, logger, k_space, params, numparams,\
                 limii=numparams.map_iter_u)[0]
                 
             utils.save_u(u,git,params)          
-            utils.save_mu(m,u,git,params)             
-            
+            utils.save_mu(m,u,git,params)        
+            # convergence test in s/u-map reconstruction 
+            if np.max(np.abs(u - uold)) < params.map_conv:
+                logger.message('Compact image converged.')
+                convergence += 1     
+                
         elif numparams.algo_liste[algo_run] == 'sd_m':
                
             logger.header2("Computing the m-MAP estimate.\n")   
@@ -1208,9 +1227,9 @@ def mapfilter_I_u(d, m,u, pspec, N, R, logger, k_space, params, numparams,\
                 utils.save_m(m,git,params)  
             mlist.append(m)
             utils.save_mu(m,u,git,params)  
-             
+            # convergence test in s/u-map reconstruction             
             if np.max(np.abs(m - mold)) < params.map_conv:
-                logger.message('Image converged.')
+                logger.message('Extended image converged.')
                 convergence += 1                    
 
        
@@ -1230,6 +1249,7 @@ def mapfilter_I_u(d, m,u, pspec, N, R, logger, k_space, params, numparams,\
             if np.max(np.abs(m - mold)) < params.map_conv and np.max(np.abs(u - uold)) < params.map_conv:
                 logger.message('Image converged.')
                 convergence += 1            
+                
         #temporary
         elif numparams.algo_liste[algo_run] == 'test_u':
              u = utils.Energy_min(u,en,params,numparams,'L-BFGS-B',numparams.map_iter_u, x1 = None,pure='pure_u')
@@ -1242,7 +1262,7 @@ def mapfilter_I_u(d, m,u, pspec, N, R, logger, k_space, params, numparams,\
              utils.save_mu(m,u,git,params)              
         #temporary
             
-        # convergence test in s/u-map reconstruction
+        # pure compact field reconstruction
         elif numparams.algo_liste[algo_run] == 'pure_points':
             args = (j, S, M, params.rho0, numparams.beta, numparams.eta)
             en = energy_u(args)  
@@ -1250,8 +1270,11 @@ def mapfilter_I_u(d, m,u, pspec, N, R, logger, k_space, params, numparams,\
             u = minimize(x0=u, alpha=numparams.map_alpha_u, \
                tol=numparams.map_tol_u, clevel=numparams.map_clevel_u, \
                limii=numparams.map_iter_u)[0]
-               
             utils.save_u(u,git,params)    
+            # convergence test in s/u-map reconstruction 
+            if np.max(np.abs(u - uold)) < params.map_conv:
+                logger.message('Compact image converged.')
+                convergence += 1     
 
         # check whether to do ecf-like noise update              
         elif numparams.algo_liste[algo_run] == 'update_noise':        

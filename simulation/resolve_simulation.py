@@ -11,7 +11,7 @@ import scipy.stats as sc
 
 asec2rad = 4.84813681e-6
 
-def simulate(params, simparams, logger):
+def simulate(params,numparams, simparams, logger):
     """
     Setup for the simulated signal.
     """
@@ -43,7 +43,6 @@ def simulate(params, simparams, logger):
     #setting up signal power spectrum
     powspec_I = [simparams.p0_sim * (1. + (k / simparams.k0) ** 2) ** \
         (-simparams.sigalpha) for k in kindex]
-    #powspec_I[0] *= 1e-20
     utils.save_results(kindex,'simulated signal PS','resolve_output_' + \
         str(params.save) + "/general/" + params.save + '_ps_original',\
         log = 'loglog', value2 = powspec_I)
@@ -53,23 +52,28 @@ def simulate(params, simparams, logger):
     # extended signal
     np.random.seed(simparams.signal_seed)
     I = field(s_space, random="syn", spec=S.get_power()) + simparams.offset
-    np.random.seed()    
-
+    np.random.seed() 
+    
+    # get powerspectrum for comparison 
+    k_space = s_space.get_codomain()
+    k_space.set_power_indices(log=True, nbins=numparams.bins)    
+    kindex_sim, rho_sim, pindex_sim,pundex_sim = k_space.get_power_indices()
+    powspec_sim = I.power(pindex=pindex_sim,kindex=kindex_sim,rho=rho_sim)    
+    
     # compact signal
     Ip = np.zeros((simparams.simpix,simparams.simpix))
     if simparams.compact: 
-        np.random.seed(81232562353)
+        np.random.seed(simparams.compact_seed)
         Ip= sc.invgamma.rvs(0.5, size = simparams.simpix*simparams.simpix,scale = simparams.sim_eta) 
         Ip.shape = (simparams.simpix,simparams.simpix)
-        np.random.seed()          
-   
+        np.random.seed()     
+        
     utils.save_results(exp(I),'simulated extended signal','resolve_output_' + \
         str(params.save) + "/general/" + params.save + '_expsimI')
     if simparams.compact:
         utils.save_results(Ip,'simulated compact signal','resolve_output_' + \
             str(params.save) + "/general/" + params.save + '_expsimIp')
-            
-
+    
     # maximum k-mode and resolution of data
     uvrange = np.array([np.sqrt(u[i]**2 + v[i]**2) for i in range(len(u))])
     dx_real_rad = (np.max(uvrange))**-1
@@ -77,13 +81,12 @@ def simulate(params, simparams, logger):
         'asec ' + str(dx_real_rad/asec2rad))
 
     utils.save_results(u,'UV','resolve_output_' + str(params.save) + \
-        "/general/" +  params.save + "_uvcov", plotpar='o', value2 = v)
-
-
+        "/general/" +  params.save + "_uvcov", plotpar='o', value2 = v) 
+    
     # response, no simulated primary beam
     A = 1.
     R = r.response(s_space, d_space, u, v, A)
-
+    
     # Set up Noise
     sig = R(field(s_space, val = exp(I) + Ip))
     SNR = simparams.SNR
@@ -104,10 +107,11 @@ def simulate(params, simparams, logger):
        "/general/" + params.save + '_signal')
 
     d = R(exp(I) + Ip) + n
-        
+          
     # reset imsize settings for requested parameters; corrupt noise if wanted
     s_space = rg_space(params.imsize, naxes=2, dist = params.cellsize, \
         zerocenter=True)
+        
     R = r.response(s_space, d_space, u, v, A)
     if simparams.noise_corruption:
         N = N_operator(domain=d_space,imp=True,para=[var*simparams.noise_corruption*np.ones(d_space.num())])
@@ -119,8 +123,9 @@ def simulate(params, simparams, logger):
     utils.save_results(di,"dirty image",'resolve_output_' + str(params.save) +\
         "/general/" + params.save + "_di")
         
-        
-    # perform uv_cut on simulated data if needed
+       
+    # perform uv_cut on simulated data if required
+    # use >10 for everting with uvrange over 10 % of the max uvrange
     if simparams.uv_cut_str:
         proz = float('0.'+(simparams.uv_cut_str[1:len(simparams.uv_cut_str)]))
         uv_cut = proz*np.max(np.sqrt(u**2+v**2)) 
@@ -135,7 +140,7 @@ def simulate(params, simparams, logger):
             di_u = Rdirty_u.adjoint_times(d_u)* s_space.vol[0] * s_space.vol[1]
             utils.save_results(di_u,"dirty image_u",'resolve_output_' + str(params.save) +\
                 "/general/" + params.save + "_di_u")
-            return d_u, N_u, Rdirty_u, di_u, d_u_space, s_space, exp(I), n_u
+            return d_u, N_u, Rdirty_u, di_u, d_u_space, s_space, exp(I), n_u, powspec_sim
         elif simparams.uv_cut_str[0] == '<':
             u_bot = u[np.sqrt(u**2+v**2)< uv_cut]
             v_bot = v[np.sqrt(u**2+v**2)< uv_cut]
@@ -147,9 +152,8 @@ def simulate(params, simparams, logger):
             di_m = Rdirty_m.adjoint_times(d_m)  * s_space.vol[0] * s_space.vol[1]   
             utils.save_results(di_m,"dirty image_m",'resolve_output_' + str(params.save) +\
                 "/general/" + params.save + "_di_m")
-            return d_m, N_m, Rdirty_m, di_m, d_m_space, s_space, exp(I), n_m    
-
-            
+            return d_m, N_m, Rdirty_m, di_m, d_m_space, s_space, exp(I), n_m, powspec_sim
+ 
     # plot the dirty beam
     uvcov = field(d_space,val=np.ones(np.shape(d.val), \
         dtype = np.complex128))            
@@ -157,7 +161,7 @@ def simulate(params, simparams, logger):
     utils.save_results(db,"dirty beam",'resolve_output_' + str(params.save)+\
             '/general/' + params.save + "_db")
     
-    return d, N, R, di, d_space, s_space, exp(I), n
+    return d, N, R, di, d_space, s_space, exp(I), n, powspec_sim
     
 class simparameters(object):
     """
@@ -181,8 +185,9 @@ class simparameters(object):
         self.check_default('uv_cut_str', parset, '', dtype = str)
         if self.compact:
             self.check_default('nsources', parset, 50, dtype = int)
-            self.check_default('pfactor', parset, 5, dtype = float)      
+            self.check_default('pfactor',parset, 5, dtype = float)      
             self.check_default('sim_eta', parset, 1e-7, dtype = float) 
+            self.check_default('compact_seed', parset, 81232562353, dtype = int)
     
     def check_default(self, parameter, parset, default, dtype=str):
         
