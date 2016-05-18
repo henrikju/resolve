@@ -328,7 +328,7 @@ def load_numpy_data(msfn, logger):
         freqs = np.load(msfn + '_freq.npy')
         nchan = np.load(msfn + '_nchan.npy')    
         nspw = np.load(msfn + '_nspw.npy')
-        summary = np.load(msfn + '_sum.npy')
+        summary = np.load(msfn + '_sum.npy').item()
         nvis = np.load(msfn + '_nvis.npy')
         flags =  np.load(msfn + '_flags.npy')
 
