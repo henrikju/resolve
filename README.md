@@ -1,5 +1,9 @@
 # RESOLVE - A Bayesian algorithm for aperture synthesis imaging in radio astronomy
 
+-------------------------------------------------------------------------------------------------------------------------------
+ATTENTION: Right now the code is being updated with new features and will be heavily non-tested and not well documented. Please contact henrikju@astro.uni-bonn.de for any details or interest in a quick use of the code.
+-------------------------------------------------------------------------------------------------------------------------------
+
 RESOLVE is a Bayesian inference algorithm for image reconstruction in radio interferometry. It is optimized for extended and diffuse sources. Features include:
 
 - parameter-free Bayesian reconstruction of radio continuum data with a focus on extended and weak diffuse sources.
