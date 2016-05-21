@@ -40,6 +40,7 @@ import pylab as pl
 import numpy as np
 from nifty import *
 from nifty import nifty_tools as nt
+from scipy.ndimage.interpolation import zoom
 import pyfits
 
 #import RESOLVE-package modules
@@ -730,9 +731,9 @@ def starting_guess_setup(params, logger, s_space, d_space, di):
     else:
         if params.sglogim:             
             m_s = field(s_space, target=s_space.get_codomain(), \
-                val=np.load(params.init_type_s))
+                val=zoom(np.load(params.init_type_s),zoom=numparams.zoomfactor)
         else:
-            expm_s_val = np.abs(np.load(params.init_type_s))
+            expm_s_val = np.abs(zoom(np.load(params.init_type_s),zoom=numparams.zoomfactor))
             expm_s_val[expm_s_val==0] = 1e-12
             m_s = field(s_space, target=s_space.get_codomain(), \
                 val=log(expm_s_val))
