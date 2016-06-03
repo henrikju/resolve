@@ -2097,7 +2097,6 @@ def write_output_to_fits(m, params, notifier='',mode='I',u=None):
 def generate_fitsheader(hdu, params):
     """
     """
-
     
     today = datetime.datetime.today()
     
@@ -2107,43 +2106,74 @@ def generate_fitsheader(hdu, params):
     
     hdu.header.update('DATE', str(today), 'Date when the file was created')
     
-    hdu.header.update('NAXIS', 2,
+  # hdu.header.update('OBJECT', params.summary['name'], 'Name of object')
+    
+    hdu.header.update('NAXIS', 3,
                       'Number of axes in the data array, must be 2')
 
     hdu.header.update('BUNIT','JY/PIXEL')
+    
+    hdu.header.update('BTYPE','Intensity')
                       
     hdu.header.update('NAXIS1', params.imsize,
                       'Length of the RA axis')
     
-    hdu.header.update('CTYPE1', 'RA--SIN', 'Axis type')
+    hdu.header.update('CTYPE1', 'RA---SIN', 'Axis type')
     
-    hdu.header.update('CUNIT1', 'RAD', 'Axis units')
+    hdu.header.update('CUNIT1', 'deg', 'Axis units')
     
     # In FITS, the first pixel is 1, not 0!!!
     hdu.header.update('CRPIX1', params.imsize/2, 'Reference pixel')
     
     hdu.header.update('CRVAL1', params.summary['field_0']['direction']\
-    ['m0']['value'], 'Reference value')
+    ['m0']['value'] * 57.2958, 'Reference value')
     
-    hdu.header.update('CDELT1', -1 * params.cellsize, 'Size of pixel bin')
+    hdu.header.update('CDELT1', -1 * params.cellsize * 57.2958, 'Size of pixel bin')
     
     hdu.header.update('NAXIS2', params.imsize,
                       'Length of the RA axis')
     
-    hdu.header.update('CTYPE2', 'DEC-SIN', 'Axis type')
+    hdu.header.update('CTYPE2', 'DEC--SIN', 'Axis type')
     
-    hdu.header.update('CUNIT2', 'RAD', 'Axis units')
+    hdu.header.update('CUNIT2', 'deg', 'Axis units')
     
     # In FITS, the first pixel is 1, not 0!!!
     hdu.header.update('CRPIX2', params.imsize/2, 'Reference pixel')
     
     hdu.header.update('CRVAL2', params.summary['field_0']['direction']\
-    ['m1']['value'], 'Reference value')
+    ['m1']['value'] * 57.2958, 'Reference value')
     
-    hdu.header.update('CDELT2', params.cellsize, 'Size of pixel bin')
+    hdu.header.update('CDELT2', params.cellsize * 57.2958, 'Size of pixel bin')
     
+    if (params.summary['field_0']['direction']['refer'] == '1950' or \
+        params.summary['field_0']['direction']['refer'] == '1950_VLA'or \
+        params.summary['field_0']['direction']['refer'] == 'B1950' or \
+        params.summary['field_0']['direction']['refer'] == 'B1950_VLA'):
+            
+        hdu.header.update('EQUINOX', 1950)
+                      
+        hdhdu.header.update('RADESYS', 'FK4')
+    
+    elif (params.summary['field_0']['direction']['refer'] == '2000' or \
+        params.summary['field_0']['direction']['refer'] == 'J2000'):
+
+        hdu.header.update('EQUINOX', 2000)
+                      
+        hdhdu.header.update('RADESYS', 'FK5')
+    
+    if params.freq == 'wideband':
+        raise NotImplementedError('No widefield FITS-cube output yet.')
+    else:
+        hdu.header.update('NAXIS3', 1, 'Length of frequency axis')
+        
+        hdu.header.update('CTYPE3', 'FREQ', 'Axis type')
+        
+        hdu.header.update('CRVAL3', params.freqs[params.freq[0],params.freq[1]]\
+            , 'Frequency Reference value')
+            
+        
     hdu.header.add_history('RESOLVE: Reconstruction performed by ' +
-                           'resolve.py.')
+                               'resolve.py.')
 
     
     hdu.header.__delitem__('NAXIS4')
@@ -2151,7 +2181,7 @@ def generate_fitsheader(hdu, params):
     hdu.header.__delitem__('CRVAL4')
     hdu.header.__delitem__('CRPIX4')
     hdu.header.__delitem__('CDELT4')
-    hdu.header.__delitem__('CUNIT4')  
+    hdu.header.__delitem__('CUNIT4')
  
 
 if __name__ == "__main__":
