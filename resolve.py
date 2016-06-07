@@ -987,6 +987,11 @@ def mapfilter_I(d, m, pspec, N, R, logger, k_space, params, numparams,\
                 str(wideband_git) + "_" + str(git), rho0 = params.rho0)
             write_output_to_fits(np.transpose(exp(m.val)*params.rho0),params, \
                 notifier = str(wideband_git) + "_" + str(git),mode = 'I')
+            # Save residual iteration
+            utils.save_results((R(exp(m)) - d).val, "residual, iter #" + str(git), \
+                'resolve_output_' + str(params.save) +\
+                '/m_reconstructions/' + params.save + "_residual" +\
+                str(wideband_git) + "_" + str(git), rho0 = params.rho0)
         else:
             utils.save_results(exp(m.val), "map, iter #" + str(git), \
                 'resolve_output_' + str(params.save) +\
@@ -994,6 +999,11 @@ def mapfilter_I(d, m, pspec, N, R, logger, k_space, params, numparams,\
                 rho0 = params.rho0)
             write_output_to_fits(np.transpose(exp(m.val)*params.rho0),params,\
                 notifier = str(git), mode='I')
+            # Save residual iteration
+            utils.save_results((R(exp(m)) - d).val, "residual, iter #" + str(git), \
+                'resolve_output_' + str(params.save) +\
+                '/m_reconstructions/' + params.save + "_residual" +\
+                str(git), rho0 = params.rho0)
                 
 
         # check whether to do ecf-like noise update
