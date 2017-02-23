@@ -47,7 +47,7 @@ possibly more robust in high noise cases, against outliers or wrongly measured n
 RESOLVE is a python package with much functionality actually being deferred to underlying C routines. For the end user it is 
 simply started as a command line python tool using the main function resolve.py:
 
-python resolve.py *data pathname imsize cellsize resolve mode*
+python resolve.py *data_pathname imsize cellsize resolve mode*
 
 ### Options:
 
@@ -57,7 +57,7 @@ python resolve.py *data pathname imsize cellsize resolve mode*
 
 ### Arguments:
 
-*data pathname* 
+*data_pathname* 
 
 Path to the visibility data.
 
