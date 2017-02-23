@@ -47,7 +47,7 @@ possibly more robust in high noise cases, against outliers or wrongly measured n
 RESOLVE is a python package with much functionality actually being deferred to underlying C routines. For the end user it is 
 simply started as a command line python tool using the main function resolve.py:
 
-python resolve.py <data pathname> <imsize> <cellsize> <resolve mode> 
+python resolve.py *data pathname imsize cellsize resolve mode*
 
 ### Options:
 
@@ -55,9 +55,11 @@ python resolve.py <data pathname> <imsize> <cellsize> <resolve mode>
 -p use python-casacore module for direct read-in of measurement sets (as opposed to the "casatools" procedure indicated below).
 -v verbosity, range 1(only headers) to 5(diagnostic outputs); default:2
 
-### Description of arguments:
+### Arguments:
 
-<data pathname> path to the visibility data.
+*data pathname* 
+
+Path to the visibility data.
 
 It is possible to directly read in measurement sets using the python-casacore module with the "-p" flag. The <data pathname> points to	   the measurememt set.
 
@@ -73,11 +75,17 @@ If the wsclean functions are used, this needs to be again the pathname of the me
 
 (A more generalized interface for RESOLVE to measurement sets might get developed at some point.)
 
-<imsize> Size of image in numbers of pixels of one axis. Choose as in standard CLEAN imaging.
+*imsize* 
 
-<cellsize> Size of one pixel in rad. Choose as in standard CLEAN imaging.
+Size of image in numbers of pixels of one axis. Choose as in standard CLEAN imaging.
 
-<resolve_mode> Activates one of the available RESOLVE modes, employing different features of the package with sets of 
+*cellsize* 
+
+Size of one pixel in rad. Choose as in standard CLEAN imaging.
+
+*resolve_mode* 
+
+Activates one of the available RESOLVE modes, employing different features of the package with sets of 
 (more or less) robust default parameters for the underlying inference and optimization routines. The idea is that for
 'standard cases' and high SNR, the end user only has to choose from these and doesn't need to bother with the complex
 numerical details. Every interested user can define custom modes and change virtually all parameters and combinations 
