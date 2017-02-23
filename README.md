@@ -1,13 +1,13 @@
 # RESOLVE - A Bayesian algorithm for aperture synthesis imaging in radio astronomy
 
 -------------------------------------------------------------------------------------------------------------------------------
-ATTENTION: part of the code is constantly being updated with new features, and so will be heavily non-tested and not well documented. 
-Please contact Henrik.Junklewitz@gmail.com for any details or problems. 
+## ATTENTION: part of the code is constantly being updated with new features, and so will be heavily non-tested and not well documented. 
+## Please contact Henrik.Junklewitz@gmail.com for any details or problems. 
 -------------------------------------------------------------------------------------------------------------------------------
 
 RESOLVE is a Bayesian inference package for image reconstruction in radio interferometry.
 
-## Stable features:
+### Stable features:
 
 - parameter-free Bayesian image reconstruction of radio continuum data with a focus on extended and weak diffuse sources.
 - approximate posterior uncertainty map for the image dependent on the reconstructed image and on estimated measurement noise.
@@ -16,22 +16,22 @@ RESOLVE is a Bayesian inference package for image reconstruction in radio interf
 - support for measurement sets.
 - included simple radio interferometric simulation tool (if uv-coverage is provided).
 
-Experimental (less tested) features:
+### Experimental (less tested) features:
 
 - PointResolve module, allowing for the simultaneous imaging and separation of point and extended sources. 
 - rough noise estimation routine, additional inferring the visibility noise variance; 
 possibly more robust in high noise cases, against outliers or wrongly measured noise
 - usage of wsclean(LINK) functions for performance and functionality can be activated. Mostly gridding routines and w-stacking. Wsclean needs to be installed.
 
-Highly Experimental (only really tested in simulations):
+### Highly Experimental (only really tested in simulations):
 
 - Multi-frequency RESOLVE, allowing for simultaneous reconstruction of total intensity and spectral index.
 
 --------------------------------------------------------------------------------------------------------------------------------
-Quick installation guide
+## Quick installation guide
 --------------------------------------------------------------------------------------------------------------------------------
 
-Prerequisite libraries:
+### Prerequisite libraries:
 - the full python package: numpy, scipy, pyfits, matplotlib, cython
 - the statistical inference package [nifty](https://github.com/information-field-theory/nifty)
 - the general Fourier transform package [gfft](https://github.com/mrbell/nifty)
@@ -41,7 +41,7 @@ Prerequisite libraries:
 - optional: the astropy package for astronomical coordinate system support in numpy images. 
 
 --------------------------------------------------------------------------------------------------------------------------------
-Quick start guide
+## Quick start guide
 --------------------------------------------------------------------------------------------------------------------------------
 
 RESOLVE is a python package with much functionality actually being deferred to underlying C routines. For the end user it is 
@@ -49,13 +49,13 @@ simply started as a command line python tool using the main function resolve.py:
 
 python resolve.py <data pathname> <imsize> <cellsize> <resolve mode> 
 
-Options:
+### Options:
 
 -s <custom save directory suffix>
 -p use python-casacore module for direct read-in of measurement sets (as opposed to the "casatools" procedure indicated below).
 -v verbosity, range 1(only headers) to 5(diagnostic outputs); default:2
 
-Description of arguments:
+### Description of arguments:
 
 <data pathname> path to the visibility data.
 
