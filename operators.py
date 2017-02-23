@@ -3,7 +3,7 @@ operators.py
 Written by Henrik Junklewitz
 
 operators.py is an auxiliary file for resolve.py and belongs to the RESOLVE
-package. It provides all the needed operators for the inference code except 
+package. It provides all the needed operators for the inference code except
 the response operator defined in response.py.
 
 RESOLVE is free software: you can redistribute it and/or modify
@@ -22,35 +22,41 @@ along with RESOLVE. If not, see <http://www.gnu.org/licenses/>.
 
 from nifty import *
 from nifty import nifty_tools as nt
-from utility_functions import exp 
+from utility_functions import exp,log
+from scipy.optimize import minimize as scipyminimize
+
+import warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+ 
 #-------------------------single band operators--------------------------------
 
-class N_operator(operator):
-    """
-    Wrapper around a standard Noise operator. Handles radio astronomical flags.
-    """
-    
-    def _multiply(self, x):
-        
-        variance = self.para[0]
-        
-        mask = variance>0
-        variance[variance==0] = 1.
+#class N_operator(operator):
+#    """
+#    Wrapper around a standard Noise operator. Handles radio astronomical flags.
+#    """
+#    
+#    def _multiply(self, x):
+#        
+#        variance = self.para[0]
+#        
+#        mask = variance>0
+#        variance[variance==0] = 1.
+#
+#        Ntemp = diagonal_operator(domain=self.domain, diag = variance)
+#
+#        return mask * Ntemp(x)
+#
+#    def _inverse_multiply(self, x):
+#        
+#        variance = self.para[0]
+#        
+#        mask = variance>0
+#        variance[variance==0] = 1.
+#
+#        Ntemp = diagonal_operator(domain=self.domain, diag = variance)
+#
+#        return mask * Ntemp.inverse_times(x)
 
-        Ntemp = diagonal_operator(domain=self.domain, diag = variance)
-
-        return mask * Ntemp(x)
-
-    def _inverse_multiply(self, x):
-        
-        variance = self.para[0]
-        
-        mask = variance>0
-        variance[variance==0] = 1.
-
-        Ntemp = diagonal_operator(domain=self.domain, diag = variance)
-
-        return mask * Ntemp.inverse_times(x)
         
 class M_operator(operator):
     """
@@ -67,6 +73,10 @@ class M_operator(operator):
 
 class D_operator(operator):
     """
+    The inverse of the D operator is effectively equivalent with the second
+    derivitave of the lognormal_Hamiltonian. Since it is only used together
+    with this operator, this is not made explicitly clear and, thus,the
+    D_operator is not a direct part of the lognormal Hamiltonian.
     """
 
     def _inverse_multiply(self, x):
@@ -103,18 +113,17 @@ class D_operator(operator):
         method.
         """
         convergence = 0
-        numparams = self.para[7]
         params = self.para[6]
 
-        if numparams.pspec_algo == 'cg':
+        if params.pspec_algo == 'cg':
             x_,convergence = nt.conjugate_gradient(self._matvec, x, \
-                note=True)(tol=numparams.pspec_tol,clevel=numparams.pspec_clevel,\
-                limii=numparams.pspec_iter)
+                note=True)(tol=params.pspec_tol,clevel=params.pspec_clevel,\
+                limii=params.pspec_iter)
                 
-        elif numparams.pspec_algo == 'sd':
+        elif params.pspec_algo == 'sd':
             x_,convergence = nt.steepest_descent(self._matvec, x, \
-                note=True)(tol=numparams.pspec_tol,clevel=numparams.pspec_clevel,\
-                limii=numparams.pspec_iter)
+                note=True)(tol=params.pspec_tol,clevel=params.pspec_clevel,\
+                limii=params.pspec_iter)
                     
         return x_
         
@@ -135,25 +144,28 @@ class M_part_operator(operator):
 
 
 
-class energy(object):
+class lognormal_Hamiltonian_m(object):
     
     def __init__(self, args):
         self.j = args[0]
         self.S = args[1]
         self.M = args[2]
-        self.rho0= args[3]
+        self.rho0 = args[3]
+        self.d = args[4]
         
-    def H(self,x):
+    def H(self, x):
         """
         """
-        expx = field(domain = x.domain, val = self.rho0 * exp(x))
-        part1 = x.dot(self.S.inverse_times(x.weight(power = 0)))  / 2
-        part2 = self.j.dot(expx)       
-        part3 = expx.dot(self.M(expx)) / 2
-        
-        
-        return part1 - part2 + part3
-    
+        # For H it is much faster to calculate the full Hamiltonian in a
+        # compact way like this. The derivitaves need to be fully worked out
+
+        N = self.M.para[0]
+        R = self.M.para[1]
+        n = self.d - R(exp(x))
+        return 0.5 * x.dot(self.S.inverse_times(x)) +\
+            0.5 * n.dot(N.inverse_times(n))
+
+
     def gradH(self, x):
         """
         """
@@ -166,7 +178,7 @@ class energy(object):
     
         return full
     
-    def egg(self, x):
+    def egg_s(self, x):
         
         E = self.H(x)
         g = self.gradH(x)
@@ -174,7 +186,7 @@ class energy(object):
         return E,g
 #-----------------------POINT-RESOLVE-operators------------------------------------        
 
-class energy_u(object):
+class lognormal_Hamiltonian_u(object):
     
     def __init__(self, args):
         self.j = args[0]
@@ -208,8 +220,9 @@ class energy_u(object):
         E = self.H(u)
         gu = self.gradH_u(u)        
         return E,gu        
+
         
-class energy_mu(object):
+class lognormal_Hamiltonian_mu(object):
     
     def __init__(self, args):
         self.j = args[0]
@@ -271,10 +284,16 @@ class energy_mu(object):
         gu = self.gradH_u(self.seff,u)        
         return E,gu
         
-class Dmu_operator(operator):
+class Dmm_operator(operator):
     """
-    Umbenennen um klarer zu machen das dies die 2fache ableitung
-    von H nach m ist?
+    The Dmm operator is the second derivative of the full extended_point_Hamil-
+    tonian only with respect to m. This is NOT the same as the D operator, only
+    valid for the case of a pure extended prior.    
+    
+    The inverse of the D operator is effectively equivalent with the second
+    derivitave of the lognormal_Hamiltonian. Since it is only used together
+    with this operator, this is not made explicitly clear and, thus,the
+    D_operator is not a direct part of the lognormal Hamiltonian.
     
     Nur params uebergeben oder nur [params.eta ,params.M0, params.rho0] uebergeben
     beides zu uebergeben ist unnoetig
@@ -317,18 +336,17 @@ class Dmu_operator(operator):
         method.
         """
         convergence = 0
-        numparams = self.para[8]
         params = self.para[7]
 
-        if numparams.pspec_algo == 'cg':
+        if params.pspec_algo == 'cg':
             x_,convergence = nt.conjugate_gradient(self._matvec, x, \
-                note=True)(tol=numparams.pspec_tol,clevel=numparams.pspec_clevel,\
-                limii=numparams.pspec_iter)
+                note=True)(tol=params.pspec_tol,clevel=params.pspec_clevel,\
+                limii=params.pspec_iter)
                 
-        elif numparams.pspec_algo == 'sd':
+        elif params.pspec_algo == 'sd':
             x_,convergence = nt.steepest_descent(self._matvec, x, \
-                note=True)(tol=numparams.pspec_tol,clevel=numparams.pspec_clevel,\
-                limii=numparams.pspec_iter)
+                note=True)(tol=params.pspec_tol,clevel=params.pspec_clevel,\
+                limii=params.pspec_iter)
                     
         return x_
 
@@ -375,23 +393,22 @@ class Duu_operator(operator):
         method.
         """
         convergence = 0
-        numparams = self.para[8]
         params = self.para[7]
 
-        if numparams.pspec_algo == 'cg':
+        if params.pspec_algo == 'cg':
             x_,convergence = nt.conjugate_gradient(self._matvec, x, \
-                note=True)(tol=numparams.pspec_tol,clevel=numparams.pspec_clevel,\
-                limii=numparams.pspec_iter)
+                note=True)(tol=params.pspec_tol,clevel=params.pspec_clevel,\
+                limii=params.pspec_iter)
                 
-        elif numparams.pspec_algo == 'sd':
+        elif params.pspec_algo == 'sd':
             x_,convergence = nt.steepest_descent(self._matvec, x, \
-                note=True)(tol=numparams.pspec_tol,clevel=numparams.pspec_clevel,\
-                limii=numparams.pspec_iter)
+                note=True)(tol=params.pspec_tol,clevel=params.pspec_clevel,\
+                limii=params.pspec_iter)
                     
         return x_
 
 
-#-----------------------wide band operators------------------------------------
+#-----------------------multi frequency operators------------------------------------
 
 class MI_operator(operator):
     """
@@ -463,22 +480,21 @@ class Da_operator(operator):
     def _multiply(self,x):
         
         convergence = 0
-        numparams = self.para[9]
         params = self.para[8]
 
-        if numparams.pspec_algo == 'cg':
+        if params.pspec_algo == 'cg':
             x_,convergence = nt.conjugate_gradient(self._matvec, x, \
-                note=True)(tol=numparams.pspec_tol_a,clevel=numparams.pspec_clevel_a,\
-                limii=numparams.pspec_iter_a)
+                note=True)(tol=params.pspec_tol_a,clevel=params.pspec_clevel_a,\
+                limii=params.pspec_iter_a)
                 
-        elif numparams.pspec_algo == 'sd':
+        elif params.pspec_algo == 'sd':
             x_,convergence = nt.steepest_descent(self._matvec, x, \
-                note=True)(tol=numparams.pspec_tol_a,clevel=numparams.pspec_clevel_a,\
-                limii=numparams.pspec_iter_a)
+                note=True)(tol=params.pspec_tol_a,clevel=params.pspec_clevel_a,\
+                limii=params.pspec_iter_a)
                     
         return x_
         
-class energy_a(object):
+class lognormal_Hamiltonian_a(object):
 
     
     
@@ -527,5 +543,99 @@ class energy_a(object):
         g = self.gradHa(x)
         
         return E,g
+        
+#------------------------- Minimizer functions --------------------------------
+
+
+def minimize_Hamiltonian(ham, mapguess, runlist_element, map_algo, call,
+                         map_alpha, map_tol, map_clevel, map_iter, params,
+                         uguess=None):
+
+    """
+    Minimizes a Hamiltonian object for all possible Resolve versions. It either
+    uses the steepest descent from nifty or any algorithm available in the
+    scipy.optimize module. Choices are: 'TNC','COBYLA','SLSQP','dogleg',\
+    'trust-ncg','CG','BFGS','L-BFGS-B','Nelder-Mead','Powell','Newton-CG').
+    """
+
+    if runlist_element == 'resolve_map' or runlist_element == \
+                          'point_resolve_map_m' or runlist_element ==\
+                          'point_resolve_map_u' or runlist_element ==\
+                          'mf_resolve_map_alpha' or runlist_element ==\
+                          'point_resolve_pure_point':
+
+        if map_algo == 'sd':
+
+            # Check which Hamiltonian to use
+            if runlist_element == 'resolve_map' or runlist_element ==\
+                                  'point_resolve_map_m':
+                fullham_hamgrad = ham.egg_s
+
+            if runlist_element == 'point_resolve_map_u' or runlist_element ==\
+                                  'point_resolve_pure_point':
+                fullham_hamgrad = ham.egg_u
+
+            minimize = nt.steepest_descent(fullham_hamgrad, spam=
+                                           call.callbacknifty, note=True)
+            reconstruction = minimize(x0=mapguess, alpha=map_alpha,
+                                      tol=map_tol, clevel=map_clevel,
+                                      limii=map_iter)[0]
+
+            return reconstruction
+
+        else:
+
+            x0 = mapguess
+            reconstruction = scipyminimize(Hamiltonian_to_scipy,
+                             (x0).val.flatten(), args=(ham, x0.domain, params,
+                             runlist_element), method = map_algo, jac = True,
+                             options={"maxiter": map_iter, "eps": map_alpha,
+                             "gtol": 1e4*map_tol, "disp": True},
+                             callback=call.callbackscipy)
+
+            return field(x0.domain, target=x0.target, val=reconstruction.x)
+
+
+
+
+def Hamiltonian_to_scipy(x0,ham,xdomain,params,runlist_element,\
+    mode='single_optimization', mid=0,end=0):
+
+    
+    if mode == 'single_optimization': 
+        
+        # Check which Hamiltonian to use
+        if runlist_element == 'resolve_map' or runlist_element ==\
+            'point_resolve_map_m':
+            fullham_grad = ham.egg_s
+            
+        if runlist_element == 'point_resolve_map_u' or runlist_element ==\
+            'point_resolve_pure_point':
+            fullham_grad = ham.egg_u       
+        
+        x = field(xdomain,val=x0)
+        E,g = fullham_grad(x)
+        
+        return E, g.val.flatten() * xdomain.vol.prod()
 
         
+    elif mode == 'double_optimization':        
+             
+        sval =np.array(mid)  
+        uval =np.array(mid)  
+        sval = x0[0:mid]    
+        uval = x0[mid:end]
+        s = field(xdomain, val = sval)
+        u = field(xdomain, val = uval)
+  
+        gs = ham.gradH_s(s,u)
+        gu = ham.gradH_u(s,u)
+        E = en.H(s,u)
+        
+        g=np.ones(end)    
+        gsval = gs.val.flatten()* xdomain.vol.prod()
+        guval = gu.val.flatten()* xdomain.vol.prod()
+        g[0:mid] =gsval
+        g[mid:end] =guval
+
+        return E,g

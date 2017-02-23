@@ -1,5 +1,5 @@
 """
-general_response.py
+response.py
 Written by Henrik Junklewitz
 
 General_response.py is part of the RESOLVE package and provides several 
@@ -23,6 +23,8 @@ import gfft as gf
 from nifty import *
 import pylab as pl
 
+import warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 #------------------------------------------------------------------------------
 # single band response classes

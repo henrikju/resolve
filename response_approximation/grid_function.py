@@ -1,5 +1,27 @@
+"""
+resolve.py
+
+Written by Maksim Greiner
+
+grid_functions.py is a helper functions for the fastresolve mode.
+
+Copyright 2016 Maksim Greiner and Henrik Junklewitz
+
+RESOLVE is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+RESOLVE is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU General Public License for more details.
+You should have received a copy of the GNU General Public License
+along with RESOLVE. If not, see <http://www.gnu.org/licenses/>.
+"""
+
 from nifty import *
-#from grid_cython import grid_complex_cython, grid_abs_squared_cython
+from grid_cython import grid_complex_cython, grid_abs_squared_cython
 
 def grid_function(codomain=None, inpoints=None, u=None, v=None, precision=30, abs_squared=False):
     

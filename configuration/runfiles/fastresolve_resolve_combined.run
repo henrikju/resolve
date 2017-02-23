@@ -1,0 +1,7 @@
+10
+resolve_map fastresolve.cfg 
+resolve_pspec fastresolve.cfg
+
+5
+resolve_map standard_resolve.cfg
+resolve_pspec standard_resolve.cfg

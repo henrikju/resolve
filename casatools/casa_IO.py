@@ -29,11 +29,11 @@ import numpy as np
 import Messenger as M
 
 C = 299792458
-PI = 3.14159265358979323846
+PI = np.pi
 
 #General purpose routine for MS-IO using CASA
 def read_data_from_ms(msfn, viscol="DATA", noisecol='SIGMA',
-                      mode='tot',noise_est = False,cross_pol=True):
+                      mode='tot', noise_est = False, cross_pol=True):
     """
     Reads polarization or total intensity data in visibility and noise arrays.
 
@@ -134,7 +134,8 @@ def read_data_from_ms(msfn, viscol="DATA", noisecol='SIGMA',
             data_temp = temp[viscol]
             info_temp = temp["axis_info"]
             if noisecol == 'weight_spectrum':
-                raise NotImplementedError('Weight_spectrum loadnot implemented yet.')
+                raise NotImplementedError('Weight_spectrum load not' 
+                                           + 'implemented yet.')
             else:
 	        s_temp = ms.getdata(['sigma'],\
                     ifraxis=False)['sigma']
@@ -145,7 +146,7 @@ def read_data_from_ms(msfn, viscol="DATA", noisecol='SIGMA',
                     if not(np.sum(flags[0])==np.sum(flags[3])):
                        m.warn('Warning: Different flags for ' \
                        +'different correlations/channels. '\
-                       +'Hard flag is applied: If any necessary'\
+                       +'Hard flag is applied: If any necessary '\
                        +'correlation is flagged, this gets '\
                        +'extended to all.')
                        flag = np.ones(np.shape(flags[0]))
@@ -161,7 +162,7 @@ def read_data_from_ms(msfn, viscol="DATA", noisecol='SIGMA',
                 if not(np.sum(flags[1])==np .sum(flags[2])):
                    m.warn('Warning: Different flags for ' \
                    +'different correlations/channels. '\
-                   +'Hard flag is applied: If any necessary'\
+                   +'Hard flag is applied: If any necessary '\
                    +'correlation is flagged, this gets '\
                    +'extended to all.')
                    flag = np.ones(np.shape(flags[1]))

@@ -2,7 +2,7 @@
 resolve.py
 Written by Henrik Junklewitz
 
-Resolve.py defines the main function that runs RESOLVE on a measurement 
+Resolve.py defines the main function that runs RESOLVE on a measurement
 set with radio interferometric data.
 
 Copyright 2014 Henrik Junklewitz
@@ -24,24 +24,20 @@ along with RESOLVE. If not, see <http://www.gnu.org/licenses/>.
 #import standard python modules
 from __future__ import division
 from time import time
-import sys
-import datetime
 import argparse
-import csv
 
+import warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 print '\nModule loading information:'
 
-#import necessary standard scientific modules
+#import necessary scientific modules
 import matplotlib as mpl
 mpl.use('Agg')
-import matplotlib.pyplot as plt
 import pylab as pl
 import numpy as np
 from nifty import *
-from nifty import nifty_tools as nt
 from scipy.ndimage.interpolation import zoom
-import pyfits
 
 #import RESOLVE-package modules
 import utility_functions as utils
@@ -49,7 +45,9 @@ import simulation.resolve_simulation as sim
 import response_approximation.UV_algorithm as ra
 from operators import *
 import response as r
-import Messenger as M
+import Messenger as Mess
+from algorithms import *
+import resolve_parser as pars
 
 #conditionally import wsclean module; might not be available
 #due to complicated casacore dependencies
@@ -66,99 +64,27 @@ except ImportError:
 #a few global constants
 q = 1e-15
 C = 299792458
-asec2rad = 4.84813681e-6
+asec2rad = 4.813681e-6
 gsave = ''
 gcallback = 3
 
-def resolve(params, numparams):
+# Version number of resolve code
+from version import __version__ 
+
+#-----------------------Resolve main function----------------------------------
+
+def resolve(runlist, changeplist, params):
 
     """
-        A RESOLVE-reconstruction.
-    
-        Args:
-            ms: Measurement set that holds the data to be imaged.
-            imsize: Size of the image.
-            cellsize: Size of one grid cell.
-            algorithm: Which algorithm to be used. 
-                1) 'ln-map': standard-resolve 
-                2) 'wf': simple Wiener Filter 
-                3) 'Gibbs': Gibbs-Energy minimizer
-                4) 'samp': Sampling
-                5) 'ln-map_u': point-resolve
-            init_type_s: What input should be used to fix the monopole of the map
-                by effectively estimating rho_0.
-                1) 'dirty'
-                2) '<user-defined input image pathname>'
-            use_init_s: Defines what is used as a starting guess 
-                1) False (default): Use a constant field close to zero
-                2) 'starting_guess': Use the field defined in init_type_s
-                3) '<lastit path/filename>': Load from previous iteration
-            init_type_p: Starting guess for the power spectrum.
-                1) 'k^2': Simple k^2 power spectrum.
-                2) 'k^2_mon': Simple k^2 power spectrum with fixed monopole.
-                3) 'constant': constant power spectrum using p0 from the 
-                    numparameters.
-                4) '<lastit path/filename>': Load from previous iteration
-            init_type_p_a: Starting guess for the spectral index power spectrum.
-                1) 'k^2': Simple k^2 power spectrum.
-                3) 'constant': constant power spectrum using p0_a from the 
-                    numparameters.
-                4) 4) '<lastit path/filename>': Load from previous iteration
-            freq: Whether to perform single band or wide band RESOLVE.
-                1) [spw,cha]: single band
-                2) 'wideband'
-            pbeam: user-povided primary beam pattern.
-            uncertainty: Whether to attempt calculating an uncertainty map \
-                (EXPENSIVE!).
-            noise_est: Whether to take the measured noise variances or make an \
-                estimate for them.
-                1) 'simple': simply try to estimate the noise variance using \
-                    the rms in the visibilties.
-                2) 'ecf': try a poor-man's ECF. WARNING: Changes the whole \
-                    algorithm and makes RESOLVE considerably slower.
-            map_algo: Which optimization algorithm to use for the signal estimate.\
-                1) 'sd': steepest descent, recommended for robustness.
-                2) 'lbfgs'
-            pspec_algo: Which optimization algorithm to use for the pspec estimate.\
-                1) 'cg': conjugate gradient, recommended for speed.
-                2) 'sd': steepest descent, only for robustness.
-            barea: if given a number, all units will be converted into
-                units of Jy/beam for a choosen beam. Otherwise the units
-                of images are always in Jy/px.
-            map_conv: stop criterium for RESOLVE in map reconstruction.
-            pspec_conv: stop criterium for RESOLVE in pspec reconstruction.
-            save: If not None, save all iterations to disk using the given
-                base name.
-            callback: If given integer n, save every nth sub-iteration of \
-                intermediate optimization routines.
-            plot: Interactively plot diagnostical plots. Only advised for testing.
-            simulate: Whether to simulate a signal or not.
-            reffreq: reference-frequency, only needed for wideband mode.
-            use_parset: whether to use the parameter-set file for parameter
-                parsing.
-            viscol: from which MS-column to read the visibility data.
-        
-        kwargs:
-            Set numerical or simulational parameters. All are set to tested and \
-            robust default values. For details see internal functions numparameters
-            and simparameters.
-            
-        Returns:
-            m: The MAP solution
-            p: The power spectrum.
-            u: Signal uncertainty (only if wanted).
+    Performs a RESOLVE-reconstruction.
     """
-
 
     # Turn off nifty warnings to avoid "infinite value" warnings
     about.warnings.off()
     
     # Make sure to not interactively plot. Produces a mess.
-    pl.ioff()  
+    pl.ion()
     
-    # Define simulation parameter class if needed
-    if params.simulating:
-        simparams = sim.simparameters(params)
     # Set up save directories                                                
     if not os.path.exists('resolve_output_' + str(params.save)+'/general'):
         os.makedirs('resolve_output_' + str(params.save)+'/general')
@@ -171,11 +97,11 @@ def resolve(params, numparams):
             os.makedirs('resolve_output_' + str(params.save)+\
             '/m_reconstructions')
     if not os.path.exists('resolve_output_' + str(params.save)+\
-        '/u_reconstructions') and params.algorithm == 'ln-map_u':
+        '/u_reconstructions') and params.pointresolve:
             os.makedirs('resolve_output_' + str(params.save)+\
             '/u_reconstructions')  
     if not os.path.exists('resolve_output_' + str(params.save)+\
-        '/mu_reconstructions') and params.algorithm == 'ln-map_u':
+        '/mu_reconstructions') and params.pointresolve:
             os.makedirs('resolve_output_' + str(params.save)+\
             '/mu_reconstructions')                
     if not os.path.exists('resolve_output_' + str(params.save)+\
@@ -185,301 +111,893 @@ def resolve(params, numparams):
     if not os.path.exists('resolve_output_' + str(params.save)+\
         '/D_reconstructions'):
             os.makedirs('resolve_output_' + str(params.save)+\
-            '/D_reconstructions')
-    if (params.init_type_s == 'fastResolve' or params.algorithm == 'prefastResolve' or params.algorithm == 'onlyfastResolve'):
-       if not os.path.exists('resolve_output_' + str(params.save)+\
-        '/fastresolve'):
-            os.makedirs('resolve_output_' + str(params.save)+\
-            '/fastresolve') 
+            '/D_reconstructions') 
 
     # Set up message logger            
     logfile = 'resolve_output_'+str(params.save)+'/general/' + params.save + \
         '.log'
-    logger = M.Messenger(verbosity=params.verbosity, add_timestamp=False, \
+    logger = Mess.Messenger(verbosity=params.verbosity, add_timestamp=False, \
         logfile=logfile)
+    
+    # Ensure to correctly initialize standard, point or MF-Resolve and pspec
+    if  any('ms' in string for string in runlist):
+        params.multifrequency = True
+    else:
+        params.multifrequency = False
+    if  any('point_resolve' in string for string in runlist):
+        params.pointresolve = True
+    else:
+        params.pointresolve = False
+    if  any('pspec' in string for string in runlist):
+        params.pspec = True
+    else:
+        params.pspec = False
+    if  any('uncertainty' in string for string in runlist):
+        params.uncertainty = True
+    else:
+        params.uncertainty = False
+    if  any('simulating' in string for string in changeplist):
+        params.simulating = True
+    else:
+        params.simulating = False
+    if  any('simple_point' in string for string in changeplist):
+        Ipoint = 0
 
     # Basic start messages, parameter log
     logger.header1('\nStarting RESOLVE package.')
     
-    logger.message('\nThe choosen main parameters are:\n')
+    # Read in first chunk of paramter changes for output
+    params = pars.update_parameterclass(params, changeplist[0])
+    logger.message('\n The first set of parameters are:\n')
     for par in vars(params).items():
         logger.message(str(par[0])+' = '+str(par[1]),verb_level=2)
-    logger.message('\nAll further default parameters are:\n')
-    for par in vars(numparams).items():
-        logger.message(str(par[0])+' = '+str(par[1]),verb_level=2)
-    
-    # Data setup
+
+#-- Data setup ----------------------------------------------------------------
+
+    # Simulation setup    
     if params.simulating:
-        d, N, R, di, d_space, s_space, expI, n, sim_powspec = sim.simulate(params, simparams, \
-            logger)
+        if params.multifrequency:
+            raise NotImplementedError('No multifrequency simulations'\
+            + ' implemented')
+        # This is needed in case the specific simulation setup is
+        # deviating from the default-settings
+        params = pars.update_parameterclass(params, changeplist[0])
+        d, N, R, di, d_space, s_space, expI, n, powspec_sim  = sim.simulate\
+            (params, logger)
         np.save('resolve_output_' + str(params.save)+'/general/data',d.val)
         
+    # Real data setup    
     else:
-        d, N, R, di, d_space, s_space = datasetup(params, logger) 
+        if params.multifrequency:
+            d, N, R, di, d_space, s_space = datasetup_MF(params, logger)
+        else:
+            d, N, R, di, d_space, s_space = datasetup(params, logger)
+
+    # Check if uvcuts or fastresolve are needed and then save standard settings
+    if any('uvcut' in string for string in changeplist) or any('fastresolve' 
+           in string for string in changeplist):
+        dorgval = d.val
+        Norgdiag = N.diag()
+        if not params.ftmode == 'wsclean':
+            uorg = R.u
+            vorg = R.v
+            Aorg = R.A
+
+
+#-- Starting guesses setup ----------------------------------------------------
+
+    # All runs are standard Resolve reconstructions        
+    if ((not params.multifrequency) and (not params.pointresolve)):
+        m, pspec, params, k_space = starting_guess_setup(params, logger, \
+            s_space, d_space, di)
     
-    if not params.init_type_s == 'fr_internal':
-        # Standard Starting guesses setup
-        if ((params.algorithm == ('ln-map') or params.algorithm == ('wf')) and (params.freq != 'wideband')):
-            m_s, pspec, params, k_space = starting_guess_setup(params, logger, s_space, d_space, di)
+    # All runs incorporate Point-Resolve reconstructions but no MF-Resolve
+    elif ((not params.multifrequency) and (params.pointresolve)):
+        m, pspec, u, params, k_space = starting_guess_setup(params, logger\
+            , s_space, d_space, di)
+
+    # All runs incorporate MF-Resolve reconstructions but no Point-Resolve
+    elif ((params.multifrequency) and (not params.pointresolve)):
+        m, pspec, a, pspec_a, params, k_space, k_space_a =\
+            starting_guess_setup(params, logger, s_space, d_space, di)
+
+    # All runs incorporate both Point- and MF-Resolve reconstructions
+    elif ((params.multifrequency) and (params.pointresolve)):
+        m, pspec, u, a, pspec_a, params, k_space, k_space_a =\
+            starting_guess_setup(params, logger, s_space, d_space, di)
+        
+
+#-- Operators setup -----------------------------------------------------------
+
+    # Attention: D has the same structure in pointresolve or non-pointresolve
+    # mode. There is no need to save separate D and Du operators and thus
+    # only D occurs in the code.
+
+    # All runs are without pspec, uncertainty and MF 
+    if ((not params.multifrequency) and (not params.pspec)\
+        and (not params.uncertainty)):
+         j, M, S = operator_setup(d, N, R, pspec, m, logger, k_space, params)
+
+    # All runs are with pspec and/or uncertainty but without MF and without
+    # Pointresolve
+    elif ((not params.multifrequency) and (params.pspec \
+        or params.uncertainty)):
+        j, M, D, S, alpha_prior = operator_setup(d, N, R, pspec, m, logger,\
+            k_space, params)
+        
+    # All runs are with pspec and/or uncertainty but without MF and with
+    # pointresolve
+    elif ((not params.multifrequency) and (params.pspec \
+        or params.uncertainty) and (params.pointresolve)):
+        j, M, D, S, alpha_prior = operator_setup(d, N, R, pspec, m, logger,\
+            k_space, params,u=u)
+        
+    # All runs are with pspec and/or uncertainty and with MF and without
+    # Pointresolve
+    elif (params.multifrequency and (params.pspec \
+        or params.uncertainty)):
+        j, M, D, S, alpha_prior, Da, Sa, alpha_prior_a = operator_setup(d, N,\
+            R, pspec, m, logger, k_space, params, a=a, pspec_a=pspec_a,\
+            k_space_a=k_space_a)
             
-        elif ((params.algorithm == 'ln-map_u') and (params.freq != 'wideband')):
-            m_s, pspec, m_u, params, k_space = starting_guess_setup(params, logger, s_space, d_space, di)
-    
-        elif (params.algorithm == 'ln-map') and (params.freq == 'wideband'):
-            m_s, pspec, m_a, pspec_a, params, k_space = starting_guess_setup(params, logger, s_space, d_space, di)
-    
-        elif (params.algorithm == 'ln-map_u') and (params.freq == 'wideband'):
-            m_s, pspec, m_u, m_a, pspec_a, params, k_space = starting_guess_setup(params, logger, s_space, d_space, di)
+    # All runs are with pspec and/or uncertainty and with MF and with
+    # pointresolve
+    elif (params.multifrequency and (params.pspec \
+        or params.uncertainty) and (params.pointresolve)):
+        j, M, D, S, alpha_prior, Da, Sa, alpha_prior_a = operator_setup(d, N,\
+            R, pspec, m, logger, k_space, params, u=u, a=a, pspec_a=pspec_a,\
+            k_space_a=k_space_a)
             
-    # Starting guess setup    
-    # Check whether to do FastResolve for the starting guess, only for ln-map
-    if params.algorithm == 'prefastResolve':
-        if params.init_type_s == 'fr_internal':
-            m_s = 'fr_internal'
-        if params.init_type_p == 'fr_internal':
-            pspec = 'fr_internal'
-        m_s, pspec, k_space = ra.fastresolve(R, d, s_space, 'resolve_output_'+params.save+'/fastresolve/', noise_update=params.noise_update, noise_est=params.noise_est, msg=m_s, psg=pspec, point=500)
-              
-    # Begin: Start Filter *****************************************************
-            
+    # Check whether the fastresolve response is used and than initialize
+    # needed operators once
+    if any('fastresolve' in string for string in changeplist):
+        fr_operators = ra.initialize_fastresolve(s_space,
+                                                 k_space, R, d, N.diag())
+
+#-- Start reconstruction runs with different algorithms defined in runfile ----
+
     if params.stokes != 'I':
-        logger.failure('Pol-RESOLVE not yet implemented.')
-        raise NotImplementedError('Pol-RESOLVE not yet implemented.')
-        
-        
-    if params.algorithm == 'onlyfastResolve':
-       
-        logger.header2('\nStarting only fastRESOLVE reconstruction.')
-        t1 = time()
-        m_s, p_I, k_space = ra.fastresolve(R, d, s_space, 'resolve_output_'+params.save+'/fastresolve/', point=1000)
-        t2 = time()
-        logger.success("Completed algorithm.")
-        logger.message("Time to complete: " + str((t2 - t1) / 3600.) + ' hours.')
-        
-    if params.algorithm == 'ln-map':
+        logger.failure('Polarization-RESOLVE not yet implemented.')
+        raise NotImplementedError('Polarization-RESOLVE not yet implemented.')
 
-        logger.header2('\nStarting standard RESOLVE reconstruction.')
-        
-        if params.uncertainty == 'only':
-            #single-band uncertainty map
+    # Preparation to start fundamental Resolve loop over different algorithms
+    # listed in algorithms.py
+    global_iteration = 0
+    convergence = 0
+    plist = [pspec]
+    if params.multifrequency:
+        p_a_list = [pspec_a]
+
+    # Start basic loop over different algorithm elements of Resolve run
+    globalt1 = time()
+    for (runlist_element, changep_element) in zip(runlist, changeplist):
+
+        logger.header2('Resolve is at global iteration: ' +
+                       str(global_iteration+1))
+
+        global_iteration += 1
+        # Insert the specific set of parameters for this runlist_element
+        params = pars.update_parameterclass(params, changep_element)
+
+        # Standard Resolve extended sources run
+        if runlist_element == 'resolve_map':
+
+            if (params.multifrequency and params.fastresolve):
+                raise NotImplementedError("No fastresolve available yet"
+                                          + " for multifrequency mode.")
+
+            if params.uvcut:
+
+                d, N, R, d_space = adjust_uvcut(d, N, R, params.uvcut,
+                                                params.uvcutval)
+                M = M_operator(domain=s_space, sym=True, imp=True, para=[N, R])
+                j = R.adjoint_times(N.inverse_times(d))
+
+                if params.fastresolve:
+                    # re-initialize fastresolve operators to new uv-space
+                    fr_operators = ra.initialize_fastresolve(s_space,
+                                                             k_space, R, d,
+                                                             N.diag())
+
+            if params.fastresolve:
+                # Update effected operators for fastresolve mode
+                d, N, R = ra.resolve_to_fastresolve(fr_operators)
+                M = M_operator(domain=s_space, sym=True, imp=True, para=[N, R])
+                j = R.adjoint_times(N.inverse_times(d))
+
+            mold = m
             t1 = time()
-            mapfilter_I(d, m_s, pspec, N, R, logger, k_space,\
-                params, numparams)
+            m = resolve_map(m, j, S, M, d, runlist_element, params, logger)
             t2 = time()
-            logger.success("Completed uncertainty map calculation.")
-            logger.message("Time to complete: " + str((t2 - t1) / 3600.) + ' hours.')
-            sys.exit(0)
+            logger.success("Completed standard RESOLVE extended sources"
+                           + " iteration cycle.")
+            logger.message("Time to complete: " + str((t2 - t1) / 3600.)
+                           + ' hours.')
+
+            # Intermediate saves of iteration
+
+            # Save m
+            utils.save_m(m, global_iteration, params)
+            pars.write_output_to_fits(np.transpose(exp(m.val)*params.rho0),
+                                      params, notifier=str(global_iteration),
+                                      mode='I')
+
+            # Save residual
+            # The adjointfactor only exitst for the full response
+            if not params.fastresolve:
+                tempsave = R.adjointfactor
+                R.adjointfactor = 1
+            utils.save_results(R.adjoint_times((R(exp(m)) - d)).val,
+                               'residual, iter #' + str(global_iteration),
+                               'resolve_output_' + str(params.save) +
+                               '/m_reconstructions/' + params.save +
+                               '_residual' + str(global_iteration),
+                               rho0=params.rho0)
+            if not params.fastresolve:
+                R.adjointfactor = tempsave
+
+            # Update D if necessary
+            if params.pspec or params.uncertainty:
+                D.para[2] = m
+                if params.multifrequency:
+                    Da.para[6] = m
+
+            # Check convergence progress
+            if np.max(np.abs(m - mold)) < params.map_conv:
+                logger.message('Image seems converged, increase convergence'
+                               + ' measure by one.')
+                convergence += 1
+            if check_global_convergence(convergence, runlist_element, params,
+                                        logger):
+                break
+
+            if params.uvcut or params.fastresolve:
+
+                # change back data operator definitions to original
+                d, N, R, d_space = readjust_uv(dorgval, Norgdiag, s_space,
+                                               uorg, vorg, Aorg)
+
+                M = M_operator(domain=s_space, sym=True, imp=True,
+                               para=[N, R])
+                j = R.adjoint_times(N.inverse_times(d))
+
+        # Point-Resolve extended sources run        
+        elif runlist_element == 'point_resolve_map_m':
             
-        
-
-        if params.freq != 'wideband':
-
-            #single-band s-Filter
-            t1 = time()           
-            m_s, p_I = mapfilter_I(d, m_s, pspec, N, R, logger, k_space,\
-                params, numparams)      
-            t2 = time()
-            
-        else:
-            logger.header2('Enabling RESOLVE wideband mode.')
-            logger.warn('This mode is still experimental. Save files might '\
-                + 'have misleading names.')
- 
-            if params.uncertainty_a == 'only':
-                #single-band uncertainty map
-                t1 = time()
-                mapfilter_a(d, m_a, pspec_a, N, R, logger, \
-                k_space, params, numparams, m_s, 0)
-                t2 = time()
-                logger.success("Completed alpha uncertainty map calculation.")
-                logger.message("Time to complete: " + str((t2 - t1) / 3600.)\
-                    + ' hours.')
-                sys.exit(0)           
-            
-            #wide-band s/alpha-Filter
-            t1 = time()
-            wideband_git = 0
-            while(wideband_git < numparams.wb_globiter):
-
-                #s-Filter                                                                                                                                                                              
-                m_s, p_I, = mapfilter_I(d, m_s, pspec, N, R, logger, \
-                k_space, params, numparams, m_a, wideband_git)
-
-                #a-Filter                                                                                                                                                                              
-                m_a, p_a, = mapfilter_a(d, m_a, pspec_a, N, R, logger, \
-                k_space, params, numparams, m_s, wideband_git)
-
-
-                wideband_git += 1
-
-            t2 = time()
-            
-    elif params.algorithm == 'ln-map_u':
-        
-        logger.header1('Starting Point-RESOLVE reconstruction.')
-        
-        if params.uncertainty == 'only':
-            #single-band uncertainty map
-            t1 = time()
-            mapfilter_I_u(d, m_s, m_u, pspec, N, R, logger, k_space,\
-                params, numparams)
-            t2 = time()
-            logger.success("Completed uncertainty map calculation.")
-            logger.message("Time to complete: " + str((t2 - t1) / 3600.) + ' hours.')
-            sys.exit(0)
-
-        if params.freq != 'wideband':        
-            t1 = time()                  
-            
-            m_s,m_u, p_I = mapfilter_I_u(d, m_s, m_u, pspec, N, R, logger, k_space, \
-                params, numparams)                      
-            t2 = time()
-            
-        else:
-            logger.header2('Enabling RESOLVE wideband mode.')
-            logger.warn('This mode is still experimental. Save files might '\
-                + 'have misleading names.')
-            
-            if params.uncertainty_a == 'only':
-                #single-band uncertainty map
-                t1 = time()
-                mapfilter_a(d, m_a, pspec_a, N, R, logger, rho0,\
-                k_space, params, numparams, utils.log(exp(m_s)+exp(m_u)),0)
-                t2 = time()
-                logger.success("Completed alpha uncertainty map calculation.")
-                logger.message("Time to complete: " + str((t2 - t1) / 3600.)\
-                    + ' hours.')
-                sys.exit(0)
+            if (params.multifrequency and params.fastresolve):
+                raise NotImplementedError("No fastresolve available yet"\
+                + " for multifrequency mode.")
                 
-            #wide-band su/alpha-Filter
+            if params.uvcut:
+
+                d, N, R, d_space = adjust_uvcut(d, N, R, params.uvcut,
+                                                params.uvcutval)
+                if params.fastresolve:
+                    # re-initialize fastresolve operators to new uv-space
+                    fr_operators = ra.initialize_fastresolve(s_space,
+                                                             k_space, R, d,
+                                                             N.diag())
+
+            if params.fastresolve:
+                # Update effected operators for fastresolve mode
+                d, N, R = ra.resolve_to_fastresolve(fr_operators)
+                M = M_operator(domain=s_space, sym=True, imp=True, para=[N, R])
+                j = R.adjoint_times(N.inverse_times(d))
+
+            mold = m
             t1 = time()
-            wideband_git = 0
-            while(wideband_git < numparams.wb_globiter):
+            m = point_resolve_map_m(m, u, j, S, M, runlist_element, params,\
+                logger)
+            t2 = time()
+            logger.success("Completed Point-RESOLVE extended sources"\
+                +" iteration cycle.")
+            logger.message("Time to complete: " + str((t2 - t1) / 3600.)\
+                + ' hours.')
+                
+            # Intermediate saves of iteration
+                
+            # Save m and u
+            utils.save_m(m, global_iteration, params)
+            pars.write_output_to_fits(np.transpose(exp(m.val)*params.rho0),params,\
+                notifier = str(global_iteration), mode='I')
+            utils.save_mu(m, u, global_iteration, params)
+            pars.write_output_to_fits(np.transpose(exp(m.val+u.val)*params.rho0),\
+                params,notifier = str(global_iteration), mode='I')
+                
+            # Save residual
+            if not params.fastresolve: 
+                tempsave = R.adjointfactor
+                R.adjointfactor = 1
+            utils.save_results(R.adjoint_times((R(exp(m)+exp(u)) - d)).val,\
+                'residual, iter #' + str(global_iteration), \
+                'resolve_output_' + str(params.save) +\
+                '/m_reconstructions/' + params.save + '_residual' +\
+                str(global_iteration), rho0 = params.rho0)
+            if not params.fastresolve:
+                R.adjointfactor = tempsave
+            
+            # Update D if necessary
+            if params.pspec or params.uncertainty:
+                D.para[2] = m
+                if params.multifrequency:
+                    Da.para[6] = m
+            
+            # Check convergence progress
+            if np.max(np.abs(m - mold)) < params.map_conv:
+                logger.message('Image seems converged, increase convergence'\
+                    + ' measure by one.')
+                convergence += 1
+            if check_global_convergence(convergence, runlist_element, params,\
+                logger):
+                break
 
-                #su-Filter                                                                                                                                                                              
-                m_s,m_u, p_I = mapfilter_I_u(d, m_s,m_u, pspec, N, R, logger, k_space, \
-                    params, numparams, m_a, wideband_git)      
+            if params.uvcut or params.fastresolve:
 
-                #a-Filter                                                                                                                                                                              
-                m_a, p_a, = mapfilter_a(d, m_a, pspec_a, N, R, logger,\
-                k_space, params, numparams, field(s_space,val=log(exp(m_s)+exp(m_u))), wideband_git)
+                # change back data operator definitions to original
+                d, N, R, d_space = readjust_uvcut(dorgval, Norgdiag, s_space,
+                                                  uorg, vorg, Aorg)
 
+                M = M_operator(domain=s_space, sym=True, imp=True,
+                               para=[N, R])
+                j = R.adjoint_times(N.inverse_times(d))
+            
+        # Point-Resolve point sources run        
+        elif runlist_element == 'point_resolve_map_u':
 
-                wideband_git += 1
+            if (params.multifrequency and params.fastresolve):
+                raise NotImplementedError("No fastresolve available yet"\
+                + " for multifrequency mode.")
+                
+            if params.uvcut:
 
-            t2 = time()            
-        
-    elif params.algorithm == 'wf':
-        
-        logger.header2('Starting Wiener Filter reconstruction.')
-        
-        if params.uncertainty == 'only':
-            #single-band uncertainty map
+                d, N, R, d_space = adjust_uvcut(d, N, R, params.uvcut,
+                                                params.uvcutval)
+                if params.fastresolve:
+                    # re-initialize fastresolve operators to new uv-space
+                    fr_operators = ra.initialize_fastresolve(s_space,
+                                                             k_space, R, d,
+                                                             N.diag())
+
+            if params.fastresolve:
+                # Update effected operators for fastresolve mode
+                d, N, R = ra.resolve_to_fastresolve(fr_operators)
+                M = M_operator(domain=s_space, sym=True, imp=True, para=[N, R])
+                j = R.adjoint_times(N.inverse_times(d))
+
+            uold = u
             t1 = time()
-            wienerfilter(d, m_s, pspec, N, R, logger, k_space,\
-                params, numparams)
+            u = point_resolve_map_u(m, u, j, S, M, runlist_element, params,\
+                logger)
             t2 = time()
-            logger.success("Completed uncertainty map calculation.")
-            logger.message("Time to complete: " + str((t2 - t1) / 3600.) + ' hours.')
-            sys.exit(0)
-
-        if params.freq is not 'wideband':
-            #single-band s-Filter
-            t1 = time()           
-            m_s, p_I = wienerfilter(d, m_s, pspec, N, R, logger, k_space,\
-                params, numparams)      
-            t2 = time()
+            logger.success("Completed Point-RESOLVE point sources"\
+                +" iteration cycle.")
+            logger.message("Time to complete: " + str((t2 - t1) / 3600.)\
+                + ' hours.')
+                
+            # Intermediate saves of iteration
+                
+            # Save m and u
+            utils.save_u(u, global_iteration, params)
+            pars.write_output_to_fits(np.transpose(exp(u.val)*params.rho0),params,\
+                notifier = str(global_iteration), mode='I')
+            utils.save_mu(m, u, global_iteration, params)
+            pars.write_output_to_fits(np.transpose(exp(m.val+u.val)*params.rho0),\
+                params,notifier = str(global_iteration), mode='I')
+                
+            # Save residual
+            if not params.fastresolve:
+                tempsave = R.adjointfactor
+                R.adjointfactor = 1
+            utils.save_results(R.adjoint_times((R(exp(m)+exp(u)) - d)).val,\
+                'residual, iter #' + str(global_iteration), \
+                'resolve_output_' + str(params.save) +\
+                '/m_reconstructions/' + params.save + '_residual' +\
+                str(global_iteration), rho0 = params.rho0)
+            if not params.fastresolve:
+                R.adjointfactor = tempsave
             
-        else:
-            logger.header2('Enabling RESOLVE wideband mode.')
-            logger.warn('This mode is still experimental. Save files might '\
-                + 'have misleading names.')
-
-            if params.uncertainty_a == 'only':
-                #single-band uncertainty map
-                t1 = time()
-                mapfilter_a(d, m_a, pspec_a, N, R, logger, \
-                k_space, params, numparams, m_s, 0)
-                t2 = time()
-                logger.success("Completed alpha uncertainty map calculation.")
-                logger.message("Time to complete: " + str((t2 - t1) / 3600.)\
-                    + ' hours.')
-                sys.exit(0)           
+            # Update D if necessary
+            if params.pspec or params.uncertainty:
+                D.para[6] = u
+                if params.multifrequency:
+                    Da.para[6] = m
             
-            #wide-band s/alpha-Filter
+            # Check convergence progress
+            if np.max(np.abs(u - uold)) < params.map_conv_u:
+                logger.message('Image seems converged, increase convergence'\
+                    + ' measure by one.')
+                convergence += 1
+            if check_global_convergence(convergence, runlist_element, params,\
+                logger):
+                break
+
+            if params.uvcut or params.fastresolve:
+
+                # change back data operator definitions to original
+                d, N, R, d_space = readjust_uvcut(dorgval, Norgdiag, s_space,
+                                                  uorg, vorg, Aorg)
+
+                M = M_operator(domain=s_space, sym=True, imp=True,
+                               para=[N, R])
+                j = R.adjoint_times(N.inverse_times(d))
+
+        # Point-Resolve pure point sources run        
+        elif runlist_element == 'point_resolve_pure_point':
+
+            if params.uvcut:
+
+                d, N, R, d_space = adjust_uvcut(d, N, R, params.uvcut,
+                                                params.uvcutval)
+                if params.fastresolve:
+                    # re-initialize fastresolve operators to new uv-space
+                    fr_operators = ra.initialize_fastresolve(s_space,
+                                                             k_space, R, d,
+                                                             N.diag())
+
+            if (params.multifrequency and params.fastresolve):
+                raise NotImplementedError("No fastresolve available yet"\
+                + " for multifrequency mode.")
+
+            if params.fastresolve:
+                # Update effected operators for fastresolve mode
+                d, N, R = ra.resolve_to_fastresolve(fr_operators)
+                M = M_operator(domain=s_space, sym=True, imp=True, para=[N, R])
+                j = R.adjoint_times(N.inverse_times(d))
+
+            uold = u
             t1 = time()
-            wideband_git = 0
-            while(wideband_git < numparams.wb_globiter):
-
-                #s-Filter                                                                                                                                                                              
-                m_s, p_I, = wienerfilter(d, m_s, pspec, N, R, logger, \
-                k_space, params, numparams, m_a, wideband_git)
-
-                #a-Filter                                                                                                                                                                              
-                m_a, p_a, = mapfilter_a(d, m_a, pspec_a, N, R, logger, \
-                k_space, params, numparams, log(m_s), wideband_git)
-
-
-                wideband_git += 1
-
+            u = point_resolve_pure_point(u, j, S, M, runlist_element, params,\
+                logger)
             t2 = time()
+            logger.success("Completed Point-RESOLVE PURE point sources"\
+                +" iteration cycle.")
+            logger.message("Time to complete: " + str((t2 - t1) / 3600.)\
+                + ' hours.')
+                
+            # Intermediate saves of iteration
+                
+            # Save u
+            utils.save_u(u, global_iteration, params)
+            pars.write_output_to_fits(np.transpose(exp(u.val)*params.rho0),params,\
+                notifier = str(global_iteration), mode='I')
+                
+            # Save residual
+            if not params.fastresolve:
+                tempsave = R.adjointfactor
+                R.adjointfactor = 1
+            utils.save_results(R.adjoint_times((R(exp(u)) - d)).val,\
+                'residual, iter #' + str(global_iteration), \
+                'resolve_output_' + str(params.save) +\
+                '/m_reconstructions/' + params.save + '_residual' +\
+                str(global_iteration), rho0 = params.rho0)
+            if not params.fastresolve:
+                R.adjointfactor = tempsave
             
+            # Update D if necessary
+            if params.pspec or params.uncertainty:
+                D.para[6] = u
+                if params.multifrequency:
+                    Da.para[6] = m
+            
+            # Check convergence progress
+            if np.max(np.abs(u - uold)) < params.map_conv_u:
+                logger.message('Image seems converged, increase convergence'\
+                    + ' measure by one.')
+                convergence += 1
+            if check_global_convergence(convergence, runlist_element, params,\
+                logger):
+                break
+
+            if params.uvcut or params.fastresolve:
+
+                # change back data operator definitions to original
+                d, N, R, d_space = readjust_uvcut(dorgval, Norgdiag, s_space,
+                                                  uorg, vorg, Aorg)
+
+                M = M_operator(domain=s_space, sym=True, imp=True,
+                               para=[N, R])
+                j = R.adjoint_times(N.inverse_times(d))
+                
+        # Resolve spectral index run        
+        if runlist_element == 'mf_resolve_map_alpha':
+            
+            mold = m
+            t1 = time()
+            a = mf_resolve_map_alpha(a, m, j, S, M, runlist_element, params,\
+                logger)
+            t2 = time()
+            logger.success("Completed RESOLVE spectral index"\
+                +" iteration cycle.")
+            logger.message("Time to complete: " + str((t2 - t1) / 3600.)\
+                + ' hours.')
+                
+            # Intermediate saves of iteration
+                
+            # Save m
+            utils.save_results(a.val,\
+                'spectral index, iter #' + str(global_iteration), \
+                'resolve_output_' + str(params.save) +\
+                '/a_reconstructions/' + params.save + '_a' +\
+                str(global_iteration))
+            pars.write_output_to_fits(np.transpose(a.val),params,\
+                notifier = str(global_iteration), mode='I')
+                
+            # Update D if necessary
+            if params.pspec or params.uncertainty:
+                Da.para[3] = a
+            
+            # Check convergence progress
+            if np.max(np.abs(a - aold)) < params.map_conv_a:
+                logger.message('Image seems converged, increase convergence'\
+                    + ' measure by one.')
+                convergence += 1
+            if check_global_convergence(convergence, runlist_element, params,\
+                logger):
+                break
         
-    elif params.algorithm =='gibbsenergy':
-        
-        logger.failure('Gibbs energy filter not yet implemented')
-        raise NotImplementedError
-        
-    elif params.algorithm == 'sampling':
-        
-        logger.failure('Sampling algorithm not yet implemented')
-        raise NotImplementedError
+        # Resolve crude Wienerfilter run        
+        if runlist_element == 'wienerfilter_map':
+            
+            if params.uvcut:
+                
+                d, N, R, d_space = adjust_uvcut(d, N, R, params.uvcut,\
+                    params.uvcutval)
+                if params.fastresolve:
+                    # re-initialize fastresolve operators to new uv-space
+                     fr_operators = ra.initialize_fastresolve(s_space,
+                                                              k_space, R, d, 
+                                                              N.diag())
+                        
+            if params.fastresolve:
+                # Update effected operators for fastresolve mode
+                d, N, R = ra.resolve_to_fastresolve(fr_operators)
+                M = M_operator(domain=s_space, sym=True, imp=True, para=[N, R])
+                j = R.adjoint_times(N.inverse_times(d))
+            
+            mold = m
+            t1 = time()
+            m = wienerfilter_map(j, S, M, logger)
+            t2 = time()
+            logger.success("Completed standard RESOLVE extended sources"\
+                +" iteration cycle.")
+            logger.message("Time to complete: " + str((t2 - t1) / 3600.)\
+                + ' hours.')
+                
+            # Intermediate saves of iteration
+                
+            # Save m
+            utils.save_m(m, global_iteration, params)
+            pars.write_output_to_fits(np.transpose(exp(m.val)*params.rho0),params,\
+                notifier = str(global_iteration), mode='I')
+                
+            # Save residual 
+            if not params.fastresolve:
+                tempsave = R.adjointfactor
+                R.adjointfactor = 1
+            utils.save_results(R.adjoint_times((R(exp(m)) - d)).val,\
+                'residual, iter #' + str(global_iteration), \
+                'resolve_output_' + str(params.save) +\
+                '/m_reconstructions/' + params.save + '_residual' +\
+                str(global_iteration), rho0 = params.rho0)
+            if not params.fastresolve:
+                R.adjointfactor = tempsave
+            
+            # Update D if necessary
+            if params.pspec or params.uncertainty:
+                D.para[2] = m
+                if params.multifrequency:
+                    Da.para[6] = m
+            
+            # Check convergence progress
+            if np.max(np.abs(m - mold)) < params.map_conv:
+                logger.message('Image seems converged, increase convergence'\
+                    + ' measure by one.')
+                convergence += 1
+            if check_global_convergence(convergence, runlist_element, params,\
+                logger):
+                break
+            
+            if params.uvcut or params.fastresolve:
+
+                # change back data operator definitions to original
+                d, N, R, d_space = readjust_uvcut(dorgval, Norgdiag, s_space,
+                                                  uorg, vorg, Aorg)
+
+                M = M_operator(domain=s_space, sym=True, imp=True,
+                               para=[N, R])
+                j = R.adjoint_times(N.inverse_times(d))
+            
+        # Resolve crude Maximum-Likelihood run        
+        if runlist_element == 'maximum_likelihood':
+            
+            mold = m
+            t1 = time()
+            m = maximum_likelihood(m, j, M, D, params, logger)
+            t2 = time()
+            logger.success("Completed standard RESOLVE extended sources"\
+                +" iteration cycle.")
+            logger.message("Time to complete: " + str((t2 - t1) / 3600.)\
+                + ' hours.')
+                
+            # Intermediate saves of iteration
+                
+            # Save m
+            utils.save_m(m, global_iteration, params)
+            pars.write_output_to_fits(np.transpose(exp(m.val)*params.rho0),params,\
+                notifier = str(global_iteration), mode='I')
+                
+            # Save residual 
+            tempsave = R.adjointfactor
+            R.adjointfactor = 1
+            utils.save_results(R.adjoint_times((R(exp(m)) - d)).val,\
+                'residual, iter #' + str(global_iteration), \
+                'resolve_output_' + str(params.save) +\
+                '/m_reconstructions/' + params.save + '_residual' +\
+                str(global_iteration), rho0 = params.rho0)
+            R.adjointfactor = tempsave
+            
+            # Update D if necessary
+            if params.pspec or params.uncertainty:
+                D.para[2] = m
+                if params.multifrequency:
+                    Da.para[6] = m
+            
+            # Check convergence progress
+            if np.max(np.abs(m - mold)) < params.map_conv:
+                logger.message('Image seems converged, increase convergence'\
+                    + ' measure by one.')
+                convergence += 1
+            if check_global_convergence(convergence, runlist_element, params,\
+                logger):
+                break
+            
+        # Resolve power spectrum run for the extended field        
+        if runlist_element == 'resolve_pspec':
+
+            if params.uvcut:
+
+                d, N, R, d_space = adjust_uvcut(d, N, R, params.uvcut,
+                                                params.uvcutval)
+                M = M_operator(domain=s_space, sym=True, imp=True, para=[N, R])
+                j = R.adjoint_times(N.inverse_times(d))
+                if params.pointresolve:
+                    D = Dmm_operator(domain=s_space, sym=True, imp=True,
+                                     para=[S, M, m, j, params.M0_start, 
+                                     params.rho0, u, params])
+                else:
+                    D = D_operator(domain=s_space, sym=True, imp=True, 
+                                   para=[S, M, m, j, params.M0_start, 
+                                   params.rho0, params])
         
 
-    logger.success("Completed algorithm.")
-    logger.message("Time to complete: " + str((t2 - t1) / 3600.) + ' hours.')
+                if params.fastresolve:
+                    # re-initialize fastresolve operators to new uv-space
+                    fr_operators = ra.initialize_fastresolve(s_space,
+                                                             k_space, R, d,
+                                                             N.diag())
 
-    # Begin: Some plotting stuff **********************************************
+            if params.fastresolve:
+                # Update effected operators for fastresolve mode
+                d, N, R = ra.resolve_to_fastresolve(fr_operators)
+                M = M_operator(domain=s_space, sym=True, imp=True, para=[N, R])
+                j = R.adjoint_times(N.inverse_times(d))
+                if params.pointresolve:
+                    D = Dmm_operator(domain=s_space, sym=True, imp=True,
+                                     para=[S, M, m, j, params.M0_start, 
+                                     params.rho0, u, params])
+                else:
+                    D = D_operator(domain=s_space, sym=True, imp=True, 
+                                   para=[S, M, m, j, params.M0_start, 
+                                   params.rho0, params])
 
-    if params.save:
-        
-        utils.save_results(exp(m_s.val),"exp(Solution m)",\
-            'resolve_output_' + str(params.save) + '/m_reconstructions/' + \
-            params.save + "_expmfinal", rho0 = params.rho0)
-        write_output_to_fits(np.transpose(exp(m_s.val)*params.rho0),params, notifier='final',mode='I')
-        
-        if params.freq == 'wideband':
-            utils.save_results(m_a.val,"Solution a",\
-                'resolve_output_' + str(params.save) + '/m_reconstructions/' +\
-                params.save + "_mafinal", rho0 = params.rho0)
-            write_output_to_fits(np.transpose(m_a.val),params, notifier ='final', mode='a')
-        
-        utils.save_results(k_space.get_power_indices()[0],"final power spectrum",\
-                     'resolve_output_' + str(params.save) + \
-                     '/p_reconstructions/' + params.save + "_powfinal", \
-                     value2 = p_I, log='loglog')
-                     
-        if params.algorithm == 'ln-map_u':     
-            utils.save_results(exp(m_u.val),"exp(Solution u)",\
-                'resolve_output_' + str(params.save) + '/u_reconstructions/' + \
-                params.save + "_expufinal", rho0 = params.rho0)
-            write_output_to_fits(np.transpose(exp(m_u.val)*params.rho0),params, notifier='final',mode='I_u')
-       
-        if params.simulating:
+            pold = pspec
+            t1 = time()
+            pspec = resolve_pspec(m, D, S, N, R, d, k_space, alpha_prior,\
+                params, logger)
+            t2 = time()
+            logger.success("Completed RESOLVE power spectrum"\
+                +" iteration cycle.")
+            logger.message("Time to complete: " + str((t2 - t1) / 3600.)\
+                + ' hours.')
+                
+            # Intermediate saves of iteration
+            
+            # Save pspec
+            kindex = k_space.get_power_indices()[0]
+            plist.append(pspec)
+            utils.save_results(kindex,"ps, iter #" + str(global_iteration), \
+                    'resolve_output_' + str(params.save) +\
+                    "/p_reconstructions/" + params.save + "_p" +\
+                    str(global_iteration), value2=pspec,log='loglog')
+            # powevol plot 
             pl.figure()
-            pl.loglog(k_space.get_power_indices()[0], p_I, label="final")
-            pl.loglog(k_space.get_power_indices()[0],sim_powspec, label="simulated") 
-            #pl.loglog(k_space.get_power_indices()[0],sim_powspec, label="simulated")
-            pl.title("Compare final and simulated power spectrum")
+            for i in range(len(plist)):
+                pl.loglog(kindex, plist[i], label="iter" + str(i))
+            pl.title("Global iteration pspec progress")
             pl.legend()
-            pl.savefig("resolve_output_" + str(params.save) +"/p_reconstructions/"\
-                + params.save + "_compare.png")
-            pl.close()  
+            pl.savefig('resolve_output_' + str(params.save) + \
+                "/p_reconstructions/" + params.save + "_powevol.png")
+            pl.close()
+                    
+            # Update S and D
+            S.set_power(newspec=pspec,bare=True)
+            D.para[0] = S
+            
+            # Check convergence progress
+            if np.max(np.abs(utils.log(pspec)/utils.log(pold))) < np.log(1e-1):
+                logger.message('Power spectrum seems converged, increase'\
+                    + ' convergence measure by one.')
+                convergence += 1
+            if check_global_convergence(convergence, runlist_element, params,\
+                logger):
+                break
 
-    # ^^^ End: Some plotting stuff *****************************************^^^
+            if params.uvcut or params.fastresolve:
+
+                # change back data operator definitions to original
+                d, N, R, d_space = readjust_uv(dorgval, Norgdiag, s_space,
+                                               uorg, vorg, Aorg)
+
+                M = M_operator(domain=s_space, sym=True, imp=True,
+                               para=[N, R])
+                j = R.adjoint_times(N.inverse_times(d))
+
+        # Resolve power spectrum run for the extended field        
+        if runlist_element == 'mf_resolve_pspec_a':
+            
+            pold_a = pspec_a
+            t1 = time()
+            pspec_a = mf_resolve_pspec_a(a, Da, k_space, alpha_prior,\
+                params, logger)
+            t2 = time()
+            logger.success("Completed RESOLVE spectral index power spectrum"\
+                +" iteration cycle.")
+            logger.message("Time to complete: " + str((t2 - t1) / 3600.)\
+                + ' hours.')
+                
+            # Intermediate saves of iteration
+            
+            # Save pspec_a
+            kindex = k_space_a.get_power_indices()[0]
+            p_a_list.append(pspec_a)
+            utils.save_results(kindex,"ps, iter #" + str(global_iteration), \
+                'resolve_output_' + str(params.save) +\
+                "/p_reconstructions/" + params.save + "_pa" + \
+                "_" + str(global_iteration), value2=pspec,log='loglog')
+            # powevol plot 
+            pl.figure()
+            for i in range(len(p_a_list)):
+                pl.loglog(kindex, plist[i], label="iter" + str(i))
+            pl.title("Global iteration pspec progress")
+            pl.legend()
+            pl.savefig('resolve_output_' + str(params.save) + \
+                "/p_reconstructions/" + params.save + "_powevol_a.png")
+            pl.close()
+                    
+            # Update S and D
+            Sa.set_power(newspec=pspec,bare=True)
+            Da.para[0] = S
+            
+            # Check convergence progress
+            if np.max(np.abs(utils.log(pspec_a)/utils.log(pold_a)))\
+                < np.log(1e-1):
+                    logger.message('Power spectrum seems converged, increase'\
+                        + ' convergence measure by one.')
+                    convergence += 1
+            if check_global_convergence(convergence, runlist_element, params,\
+                logger):
+                break
+
+        # Resolve uncertainty approximation for the extended field
+        if runlist_element == 'uncertainty_m':
+
+            t1 = time()
+            Dhat = uncertainty_m(D, params, logger)
+            t2 = time()
+            logger.success("Completed RESOLVE uncertainty"
+                           + " calculation.")
+            logger.message("Time to complete: " + str((t2 - t1) / 3600.)
+                           + ' hours.')
+
+            # Intermediate saves of iteration
+            utils.uncertainty_functions(m, Dhat)
+
+        # Resolve uncertainty approximation for the spectral index
+        if runlist_element == 'uncertainty_a':
+
+            t1 = time()
+            Dhat_a = uncertainty_m(D, params, logger)
+            t2 = time()
+            logger.success("Completed RESOLVE uncertainty"
+                           + " calculation.")
+            logger.message("Time to complete: " + str((t2 - t1) / 3600.)
+                           + ' hours.')
+
+            # Intermediate saves of iteration
+            utils.uncertainty_functions(a, Dhat_a)
+            
+                
+        # Resolve simple noise estimation        
+        if runlist_element == 'noise_estimation':
+            
+            if (params.pointresolve and not params.multifrequency):
+                mapguess = exp(m+u)
+            elif (not params.pointresolve and not params.multifrequency):
+                mapguess = exp(m)
+            else:
+                raise NotImplementedError('Noise estimation not yet\
+                implemented for multifrequency settings')
+
+            t1 = time()
+            est_var = noise_estimation(mapguess, d, R, params, logger)
+            t2 = time()
+            logger.success("Completed RESOLVE noise estimation cycle.")
+            logger.message("Time to complete: " + str((t2 - t1) / 3600.)\
+                + ' hours.')
+            logger.message('Old variance iteration '+\
+                str(global_iteration-1)+':' + str(N.diag()))
+            logger.message('New variance iteration '+\
+                str(global_iteration)+':' + str(est_var))
+                
+            # Save est_var
+            np.save('resolve_output_' + str(params.save)\
+                + '/general/oldvar_'+str(global_iteration),N.diag())
+            np.save('resolve_output_' + str(params.save)\
+                +'/general/newvar_'+str(global_iteration),est_var)
+            np.save('resolve_output_' + str(params.save) +'/general/absdmean_'\
+                +str(global_iteration),abs(d.val).mean())
+            np.save('resolve_output_' + str(params.save) +\
+                '/general/absRmmean_' + str(global_iteration),\
+                abs(R(exp(m)).val*R.target.num()).mean())
+            
+            # Update N, M, and j
+            # This needs be done to ensure that a change back from fastresolve
+            # to resolve translates the updated noise variance
+            if  any('fastresolve' in string for string in changeplist):           
+                Norg.set_diag(est_var*np.ones(np.shape(Norg.diag())))
+            N.set_diag(est_var*np.ones(np.shape(N.diag())))
+            M = M_operator(domain=s_space, sym=True, imp=True, para=[N, R])
+            j = R.adjoint_times(N.inverse_times(d))
+
+    globalt2 = time()
+    logger.success("Completed full RESOLVE cycle.")
+    logger.message("Time to complete: " + str((globalt2 - globalt1) / 3600.)\
+        + ' hours.')
+        
+    # final plotting
+        
+    # All runs are standard Resolve reconstructions        
+    if ((not params.multifrequency) and (not params.pointresolve)):
+        finalplots(params, m, pspec, k_space)
+    
+    # All runs are simulated standard Resolve reconstructions        
+    if ((not params.multifrequency) and (not params.pointresolve) and 
+         params.simulating):
+        finalplots(params, m, pspec, k_space, powspec_sim=powspec_sim)
+    
+    # All runs incorporate Point-Resolve reconstructions but no MF-Resolve
+    elif ((not params.multifrequency) and (params.pointresolve)):
+        finalplots(params, m, pspec, k_space, u=u)
+        
+    # All runs are simulated and incorporate Point-Resolve reconstructions 
+    # but no MF-Resolve      
+    if ((not params.multifrequency) and (not params.pointresolve) and 
+         params.simulating):
+        finalplots(params, m, pspec, k_space, u=u, powspec_sim=powspec_sim)
+
+    # All runs incorporate MF-Resolve reconstructions but no Point-Resolve
+    elif ((params.multifrequency) and (not params.pointresolve)):
+        finalplots(params, m, pspec, k_space, a=a,pspec_a=pspec_a, k_space_a=
+        k_space_a)
+
+    # All runs incorporate both Point- and MF-Resolve reconstructions
+    elif ((params.multifrequency) and (params.pointresolve)):
+        finalplots(params, m, pspec, k_space, u=u, a=a,pspec_a=pspec_a, 
+        k_space_a=k_space_a)
+    
 
 
-#------------------------------------------------------------------------------
+#--------------------------Resolve functions-----------------------------------
 
 
 def datasetup(params, logger):
@@ -489,18 +1007,19 @@ def datasetup(params, logger):
         
     """
     
-    logger.header2("\nRunning data setup.")
-    
+    logger.header2("\n Running data setup.")   
+        
     #Somewhat inelegant solution, but WSclean needs its own I/O 
     if params.ftmode == 'wsclean':
         
         wscleanpars = w.ImagingParameters()
-        wscleanpars.msPath = str(params.ms)
+        wscleanpars.msPath = str(params.datafn)
         wscleanpars.imageWidth = int(params.imsize)
         wscleanpars.imageHeight = int(params.imsize)
         wscleanpars.pixelScaleX = str(params.cellsize)+'rad'
         wscleanpars.pixelScaleY = str(params.cellsize)+'rad'
-        wscleanpars.extraParameters = '-weight natural -nwlayers 1 -j 4 -channelrange 0 1'
+        wscleanpars.extraParameters = '-weight natural -nwlayers 1 -j 4'\
+        +' -channelrange 0 1'
       
         wscOP = w.Operator(wscleanpars)
         vis = wscOP.read()[0]
@@ -512,269 +1031,327 @@ def datasetup(params, logger):
             logger.warn('Trying to load in MS header as numpy file while'\
                 + ' using WSclean. If not available, FITS image output will'\
                 + ' not work.')
-            params.summary = np.load(params.ms+'_summary.npy')
+            params.summary = np.load(params.datafn+'_summary.npy')
         except IOError:
             logger.warn('No numpy MS header file found. FITS output will'\
                 +' be deactivated.')
             params.summary = None
+        
+    # data and noise settings. Inelegant if-not statement needed
+    # because wsclean routines don't explicitly read out these things
+    if not params.ftmode == 'wsclean':
 
-    #Non-WSclean (i.e. standard) loading routines
-    else:
-    
-        vis, sigma, u, v, flags, freqs, nchan, nspw, nvis, params.summary = \
-            utils.load_numpy_data(params.ms, logger)
-    
-    # definition of wideband data operators
-    if params.freq == 'wideband':
-        
-        # wideband data and noise settings. Inelegant if not statement needed
-        # because wsclean routines don't explicitly read out these things
-        if not params.ftmode == 'wsclean': 
-            u = np.array(u)
-            v = np.array(v)
-            freqs = np.array(freqs)
-            nspw = len(nspw)
-            nchan = nchan[0]
-            nvis = nvis[0]
-        
-        # Dumb simple estimate can be done now after reading in the data.
-        # No time information needed.
-        if params.noise_est == 'simple':
-            
-            variance = np.var(np.array(vis))*np.ones(np.shape(np.array(vis)))\
-                .flatten()
-        elif params.noise_est == 'SNR_assumed':
-            
-            variance = np.ones(np.shape(sigma))*np.mean(np.abs(vis*vis))/(1.+numparams.SNR_assumed)
+        if params.python_casacore:
+            vis, sigma, u, v, flags, freqs, nchan, nspw, nvis,\
+                params.summary = utils.read_data_from_ms_in_python(\
+                    params.datafn, logger)
         else:
-            
-            variance = (np.array(sigma)**2).flatten()
-            
-        # Fix of possible problems in noise estimation
-        if np.any(variance) < 1e-10:
-            variance[variance<1e-10] = np.mean(variance[variance>1e-10])
+            vis, sigma, u, v, flags, freqs, nchan, nspw, nvis,\
+                params.summary = utils.load_numpy_data(params.datafn, logger)
 
+        u = np.array(u)
+        v = np.array(v)
+    
+        sspw,schan = params.freq[0], params.freq[1]
+        vis = vis[sspw][schan]
+        sigma = sigma[sspw]
+        u = u[sspw][schan]
+        v = v[sspw][schan] 
+        flags = flags[sspw][schan]
+        
+        
+        # cut away flagged data
+        vis = np.delete(vis,np.where(flags==0))
+        u = np.delete(u,np.where(flags==0))
+        v = np.delete(v,np.where(flags==0))
+        sigma = np.delete(sigma,np.where(flags==0))
+        
+
+    # Dumb simple estimate can be done now after reading in the data.
+    # No time information needed.
+    if params.noise_est == 'simple':
+        
+        variance = np.var(np.array(vis))*np.ones(np.shape(np.array(vis)))\
+            .flatten()
+    
+    elif params.noise_est == 'simple_from_ecf':
+
+        variance = np.var(np.array(vis))*np.ones(np.shape(np.array(vis)))\
+            .flatten() /5.
+    
+    elif params.noise_est == 'from_file':  
+        
+        variance = np.ones(np.shape(np.array(vis)))\
+            *np.load('/vol/henrikj/data2/henrikju/data/' +\
+            +'cygnus/images/B23JAN84_images/resolve/Mar16_Restart/'+\
+            +'resolve_output_REDOFLAGS_cygnus_cleansg_SD_simpleest_ecf/'+
+            +'general/newvar_5.npy')
+
+    elif params.noise_est == 'SNR_assumed':
+        
+        variance = np.ones(np.shape(vis))*np.mean(np.abs(vis*vis))/ \
+            (1.+params.SNR_assumed)
+    else:
+        variance = (np.array(sigma)**2).flatten()
+
+    if params.ftmode != 'wsclean':
         # basic diagnostics                                                         
-        # maximum k-mode and resolution of data
-        uflat = u.flatten()
-        vflat = v.flatten()
-        uvrange = np.array([np.sqrt(uflat[i]**2 + vflat[i]**2) \
-            for i in range(len(u))])
+        # maximum k-mode and resolution of data                                      
+        uvrange = np.array([np.sqrt(u[i]**2 + v[i]**2) for i in range(len(u))])
         dx_real_rad = (np.max(uvrange))**-1
-        logger.message('\nMax. instrumental resolution over all spw\n' + 'rad ' \
+        logger.message('\nMax. instrumental resolution\n' + 'rad ' \
             + str(dx_real_rad) + '\n' + 'asec ' + str(dx_real_rad/asec2rad))
 
-        utils.save_results(uflat,'UV_allspw', 'resolve_output_' + str(params.save) +\
-            '/general/' + params.save + "_uvcov", \
-            plotpar='o', value2 = vflat)
-        
-        d_space = point_space(nspw*nchan*nvis, datatype = np.complex128)
-        s_space = rg_space(params.imsize, naxes=2, dist = params.cellsize,\
-            zerocenter=True)
-        
-        # primary beam function
-        if params.pbeam:
-            try:
-                logger.message('Attempting to load primary beam from'\
-                + 'file' + str(params.pbeam))
-                A = np.load(params.pbeam)
-            except IOError:
-                logger.warn('Could not find primary beam file. Set pb to 1.')
-                A = np.array([[np.ones((int(params.imsize),int(params.imsize)))\
-                for k in range(nchan)] for j in range(nspw)])
-        else:
-            
-            A = np.array([[np.ones((int(params.imsize),int(params.imsize)))\
-                for k in range(nchan)] for j in range(nspw)])
-            
-        # response operator
-        if params.ftmode == 'gfft':
-            R = r.response_mfs(s_space, d_space, \
-                               u,v,A,nspw,nchan,nvis,freqs,params.reffreq[0],\
-                               params.reffreq[1],params.ftmode)
-        else:
-            logger.failure('For wideband mode only gfft support is available.')
-        
-        d = field(d_space, val=np.array(vis).flatten())
+        utils.save_results(u,'UV', 'resolve_output_' + str(params.save) +\
+            '/general/' + params.save + "_uvcov", plotpar='o', value2 = v)
 
-        N = N_operator(domain=d_space,imp=True,para=[variance])
+        d_space = point_space(len(u), datatype = np.complex128)
+    else:
+        d_space = point_space(len(vis), datatype = np.complex128)
 
-        tempsave = R.adjointfactor
-        R.adjointfactor = np.ones((nspw,nchan))
-        di = R.adjoint_times(d) * s_space.vol[0] * s_space.vol[1]
-        R.adjointfactor = tempsave
-            
+    s_space = rg_space(params.imsize, naxes=2, dist = params.cellsize, \
+        zerocenter=True)
+    
+    # primary beam function
+    if params.pbeam:
+        try:
+            logger.message('Attempting to load primary beam from'\
+            + ' file' + str(params.pbeam))
+            A = np.load(params.pbeam)
+        except IOError:
+            logger.warn('Could not find primary beam file. Set pb to 1.')
+            A = 1.
+    else:
+        A = 1.
+        
+    # response operator
+    if params.ftmode == 'wsclean':
+        # uv arbitrarily set to 0, not needed
+        R = r.response(s_space, d_space, 0, 0, A, mode = params.ftmode,\
+                       wscOP=wscOP)
+    else:
+        R = r.response(s_space, d_space, u, v, A, mode = params.ftmode)
+
+    d = field(d_space, val=vis)
+
+    # N_operator deprecated but left for later reference
+    #N = N_operator(domain=d_space,imp=True,para=[variance])
+    variance[variance<=0]=1e-10
+    N = diagonal_operator(domain=d_space,diag=variance)
+    
+    # dirty image from CASA or Resolve for comparison
+    if params.ftmode == 'wsclean':
+        di = R.adjoint_times(d)
+    else:
+        R.adjointfactor = 1
+        di = R.adjoint_times(d) #* s_space.vol[0] * s_space.vol[1]
+        R = r.response(s_space, d_space, u, v, A)   
+    
+    if params.ftmode != 'wsclean':
         # more diagnostics 
         # plot the dirty beam
-        uvcov = field(d_space,val=np.ones(np.shape(np.array(vis).flatten()), \
-             dtype = np.complex128))            
+        uvcov = field(d_space,val=np.ones(len(u), dtype = np.complex128))
         db = R.adjoint_times(uvcov) * s_space.vol[0] * s_space.vol[1]       
-        utils.save_results(db,"dirty beam",'resolve_output_' + str(params.save)+\
+        utils.save_results(db,"dirty beam", 'resolve_output_' +str(params.save)+\
             '/general/' + params.save + "_db")
-            
-        # plot the dirty image
-        utils.save_results(di,"dirty image",'resolve_output_' +str(params.save)+\
-            '/general/' + params.save + "_di")
+    
+    # plot the dirty image
+    utils.save_results(di,"dirty image",'resolve_output_' +str(params.save)+\
+        '/general/' + params.save + "_di")
+
+    return  d, N, R, di, d_space, s_space
 
 
-        return  d, N, R, di, d_space, s_space
+def datasetup_MF(params, logger):
+    """
         
-    # definition of single band data operators
+    Data setup, feasible for the nifty framework.
+        
+    """    
+
+    logger.header2("\nRunning multifrequency data setup.")
+
+    if params.ftmode == 'wsclean':
+        raise NotImplementedError('For wideband mode, only gfft support is'\
+        + ' available. Consider using ftmode=gfft.')
+    
+    vis, sigma, u, v, flags, freqs, nchan, nspw, nvis, params.summary = \
+        utils.load_numpy_data(params.datafn, logger)
+    
+    u = np.array(u)
+    v = np.array(v)
+    freqs = np.array(freqs)
+    nspw = len(nspw)
+    nchan = nchan[0]
+    nvis = nvis[0]
+    
+    # Dumb simple estimate can be done now after reading in the data.
+    # No time information needed.
+    if params.noise_est == 'simple':
+        
+        variance = np.var(np.array(vis))*np.ones(np.shape(np.array(vis)))\
+            .flatten()
+    elif params.noise_est == 'SNR_assumed':
+        
+        variance = np.ones(np.shape(sigma))*np.mean(np.abs(vis*vis))/ \
+        (1.+params.SNR_assumed)
     else:
         
-        # data and noise settings. Inelegant if not statement needed
-        # because wsclean routines don't explicitly read out these things
-        if not params.ftmode == 'wsclean':
-            sspw,schan = params.freq[0], params.freq[1]
-            vis = vis[sspw][schan]
-            sigma = sigma[sspw]
-            u = u[sspw][schan]
-            v = v[sspw][schan] 
-            flags = flags[sspw][schan]
-            
-            
-            # cut away flagged data
-            vis = np.delete(vis,np.where(flags==0))
-            u = np.delete(u,np.where(flags==0))
-            v = np.delete(v,np.where(flags==0))
-            sigma = np.delete(sigma,np.where(flags==0))
-            
-
-        # Dumb simple estimate can be done now after reading in the data.
-        # No time information needed.
-        if params.noise_est == 'simple':
-            
-            variance = np.var(np.array(vis))*np.ones(np.shape(np.array(vis)))\
-                .flatten()
+        variance = (np.array(sigma)**2).flatten()
         
-        elif params.noise_est == 'SNR_assumed':
-            
-            variance = np.ones(np.shape(sigma))*np.mean(np.abs(vis*vis))/(1.+numparams.SNR_assumed)
-        else:
-            variance = (np.array(sigma)**2).flatten()
+    # Fix of possible problems in noise estimation
+    if np.any(variance) < 1e-10:
+        variance[variance<1e-10] = np.mean(variance[variance>1e-10])
 
-        if params.ftmode != 'wsclean':
-            # basic diagnostics                                                         
-            # maximum k-mode and resolution of data                                      
-            uvrange = np.array([np.sqrt(u[i]**2 + v[i]**2) for i in range(len(u))])
-            dx_real_rad = (np.max(uvrange))**-1
-            logger.message('\nMax. instrumental resolution\n' + 'rad ' \
-                + str(dx_real_rad) + '\n' + 'asec ' + str(dx_real_rad/asec2rad))
+    # basic diagnostics                                                         
+    # maximum k-mode and resolution of data
+    uflat = u.flatten()
+    vflat = v.flatten()
+    uvrange = np.array([np.sqrt(uflat[i]**2 + vflat[i]**2) \
+        for i in range(len(u))])
+    dx_real_rad = (np.max(uvrange))**-1
+    logger.message('\nMax. instrumental resolution over all spw\n' + 'rad ' \
+        + str(dx_real_rad) + '\n' + 'asec ' + str(dx_real_rad/asec2rad))
 
-            utils.save_results(u,'UV', 'resolve_output_' + str(params.save) +\
-                '/general/' + params.save + "_uvcov", plotpar='o', value2 = v)
-
-            d_space = point_space(len(u), datatype = np.complex128)
-        else:
-            d_space = point_space(len(vis), datatype = np.complex128)
-
-        s_space = rg_space(params.imsize, naxes=2, dist = params.cellsize, \
-            zerocenter=True)
-        
-        # primary beam function
-        if params.pbeam:
-            try:
-                logger.message('Attempting to load primary beam from'\
-                + ' file' + str(params.pbeam))
-                A = np.load(params.pbeam)
-            except IOError:
-                logger.warn('Could not find primary beam file. Set pb to 1.')
-                A = 1.
-        else:
-            A = 1.
-            
-        # response operator
-        if params.ftmode == 'wsclean':
-            # uv arbitrarily set to 0, not needed
-            R = r.response(s_space, d_space, 0, 0, A, mode = params.ftmode,\
-                           wscOP=wscOP)
-        else:
-            R = r.response(s_space, d_space, u, v, A, mode = params.ftmode)
+    utils.save_results(uflat,'UV_allspw', 'resolve_output_' + str(params.save) +\
+        '/general/' + params.save + "_uvcov", \
+        plotpar='o', value2 = vflat)
     
-        d = field(d_space, val=vis)
-
-        N = N_operator(domain=d_space,imp=True,para=[variance])
-        
-        # dirty image from CASA or Resolve for comparison
-        if params.ftmode == 'wsclean':
-            di = R.adjoint_times(d)
-        else:
-            R.adjointfactor = 1
-            di = R.adjoint_times(d) * s_space.vol[0] * s_space.vol[1]
-            R = r.response(s_space, d_space, u, v, A)   
-        
-        if params.ftmode != 'wsclean':
-            # more diagnostics 
-            # plot the dirty beam
-            uvcov = field(d_space,val=np.ones(len(u), dtype = np.complex128))
-            db = R.adjoint_times(uvcov) * s_space.vol[0] * s_space.vol[1]       
-            utils.save_results(db,"dirty beam", 'resolve_output_' +str(params.save)+\
-                '/general/' + params.save + "_db")
-        
-        # plot the dirty image
-        utils.save_results(di,"dirty image",'resolve_output_' +str(params.save)+\
-            '/general/' + params.save + "_di")
-
-        return  d, N, R, di, d_space, s_space
+    d_space = point_space(nspw*nchan*nvis, datatype = np.complex128)
+    s_space = rg_space(params.imsize, naxes=2, dist = params.cellsize,\
+        zerocenter=True)
     
+    # primary beam function
+    if params.pbeam:
+        try:
+            logger.message('Attempting to load primary beam from'\
+            + 'file' + str(params.pbeam))
+            A = np.load(params.pbeam)
+        except IOError:
+            logger.warn('Could not find primary beam file. Set pb to 1.')
+            A = np.array([[np.ones((int(params.imsize),int(params.imsize)))\
+            for k in range(nchan)] for j in range(nspw)])
+    else:
+        
+        A = np.array([[np.ones((int(params.imsize),int(params.imsize)))\
+            for k in range(nchan)] for j in range(nspw)])
+        
+    # response operator
+    R = r.response_mfs(s_space, d_space, \
+                       u,v,A,nspw,nchan,nvis,freqs,params.reffreq[0],\
+                       params.reffreq[1],params.ftmode)
+    
+    d = field(d_space, val=np.array(vis).flatten())
+
+    # N_operator deprecated but left for later reference
+    #N = N_operator(domain=d_space,imp=True,para=[variance])
+    N = diagonal_operator(domain=d_space,diag=variance)
+
+    tempsave = R.adjointfactor
+    R.adjointfactor = np.ones((nspw,nchan))
+    di = R.adjoint_times(d) * s_space.vol[0] * s_space.vol[1]
+    R.adjointfactor = tempsave
+        
+    # more diagnostics 
+    # plot the dirty beam
+    uvcov = field(d_space,val=np.ones(np.shape(np.array(vis).flatten()), \
+         dtype = np.complex128))            
+    db = R.adjoint_times(uvcov) * s_space.vol[0] * s_space.vol[1]       
+    utils.save_results(db,"dirty beam",'resolve_output_' + str(params.save)+\
+        '/general/' + params.save + "_db")
+        
+    # plot the dirty image
+    utils.save_results(di,"dirty image",'resolve_output_' +str(params.save)+\
+        '/general/' + params.save + "_di")
+
+
+    return  d, N, R, di, d_space, s_space
+ 
+
 
 def starting_guess_setup(params, logger, s_space, d_space, di):
     
     # Starting guesses for m_s
     
-    if params.init_type_s == 'const':
-        m_s = field(s_space, val = numparams.m_start)
+    if params.init_type_m == 'const':
+        m = field(s_space, val = params.m_start)
 
-    elif params.init_type_s == 'dirty':
-        m_s = field(s_space, target=s_space.get_codomain(), val=di)   
+    elif params.init_type_m == 'dirty':
+        m = field(s_space, target=s_space.get_codomain(), val=np.mean(log(di-di.min()+1e-12)))   
         
     else:
-        if params.sglogim:             
-            m_s = field(s_space, target=s_space.get_codomain(), \
-                val=zoom(np.load(params.init_type_s),zoom=numparams.zoomfactor)
+        if params.sg_logim:
+            if params.sg_meanim:
+                m = field(s_space, target=s_space.get_codomain(), \
+                val=zoom(np.load(params.init_type_m),zoom=\
+                    params.zoomfactor).mean())
+            else:    
+                m = field(s_space, target=s_space.get_codomain(), \
+                    val=zoom(np.load(params.init_type_m),zoom=\
+                        params.zoomfactor))
+        
         else:
-            expm_s_val = np.abs(zoom(np.load(params.init_type_s),zoom=numparams.zoomfactor))
-            expm_s_val[expm_s_val==0] = 1e-12
-            m_s = field(s_space, target=s_space.get_codomain(), \
-                val=log(expm_s_val))
-  
+            
+            expm_val = np.abs(zoom(np.load(params.init_type_m),zoom=\
+                params.zoomfactor))
+            expm_val[expm_val==0] = 1e-12
+            if params.sg_meanim:
+                m = field(s_space, target=s_space.get_codomain(), \
+                val=log(expm_val.mean()))
+            else:
+                m = field(s_space, target=s_space.get_codomain(), \
+                    val=log(expm_val))    
+    
     # Optional starting guesses for m_u
             
-    if params.algorithm == 'ln-map_u':
+    if params.pointresolve:
         
         
         if params.init_type_u == 'const':
-            m_u = field(s_space, val = numparams.m_u_start)
+            u = field(s_space, val = params.u_start)
         
         elif params.init_type_u == 'dirty':
-            m_u = field(s_space, target=s_space.get_codomain(), val=di)   
+            u = field(s_space, target=s_space.get_codomain(), val=di)   
             
         else:
-            if params.sglogim_u:              
-                m_u = field(s_space, target=s_space.get_codomain(),\
-                    val=params.init_type_u)
+            if params.sg_logim:
+                if params.sg_meanim:
+                    u = field(s_space, target=s_space.get_codomain(), \
+                    val=zoom(np.load(params.init_type_u),zoom=\
+                        params.zoomfactor).mean())
+                else:    
+                    u = field(s_space, target=s_space.get_codomain(), \
+                        val=zoom(np.load(params.init_type_u),zoom=\
+                            params.zoomfactor))
+            
             else:
-                start_logu = np.abs(np.load(params.init_type_u))
-                if np.any(start_logu) == 0:
-                   start_logu[start_logu==0] = 1e-15  
-                m_u = field(s_space, target=s_space.get_codomain(), \
-                val=utils.log(start_logu))
+                
+                expu_val = np.abs(zoom(np.load(params.init_type_u),zoom=\
+                    params.zoomfactor))
+                expu_val[expu_val==0] = 1e-12
+                if params.sg_meanim:
+                    u = field(s_space, target=s_space.get_codomain(), \
+                    val=log(expu_val.mean()))
+                else:
+                    u = field(s_space, target=s_space.get_codomain(), \
+                        val=log(expu_val))
                 
     if params.rho0 == 'from_sg':
         
-        if params.algorithm == 'ln-map_u':
-            params.rho0 = np.mean(exp(m_s.val[np.where(exp(m_s).val>=np.max(exp(m_s).val)\
-                / 10)] + m_u.val[np.where(exp(m_u).val>=np.max(exp(m_u).val)/ 10)]))
+        if params.pointresolve:
+            params.rho0 = np.mean(exp(m.val[np.where(exp(m).val>=\
+                np.max(exp(m).val)/ 10)] + exp(u.val[np.where(exp(u).val>=\
+                np.max(exp(u).val)/ 10)])))
         else:
-             params.rho0 = np.mean(exp(m_s.val[np.where(exp(m_s).val>=np.max(exp(m_s).val)\
-                / 10)]))
-        logger.message('rho0 was calculated as: ' + str(params.rho0)) 
+             params.rho0 = np.mean(exp(m.val[np.where(exp(m).val>=\
+                np.max(exp(m).val)/ 10)]))
+        logger.message('rho0 was calculated from sg as: ' + str(params.rho0)) 
         
     if not params.rho0 == 1.:
         
-        m_s -= log(params.rho0)
-        if params.algorithm == 'ln-map_u':
-            m_u -= log(params.rho0)
+        m -= log(params.rho0)
+        if params.pointresolve:
+            u -= log(params.rho0)
 
     np.save('resolve_output_' + str(params.save)+'/general/rho0',params.rho0)
     if params.rho0 < 0:
@@ -786,1435 +1363,371 @@ def starting_guess_setup(params, logger, s_space, d_space, di):
 
     # Basic k-space
     k_space = s_space.get_codomain()
+        
     #Adapts the k-space properties if binning is activated.
-    #if numparams.bins:
-    #    k_space.set_power_indices(log=True, nbins=numparams.bins)
-    # k-space prperties    
-    kindex,rho_k,pindex,pundex = k_space.get_power_indices(log=True, nbins=numparams.bins)
+    if params.bins:
+        k_space.set_power_indices(log=True, nbins=params.bins)
+    
+    # k-space properties    
+    kindex,rho_k,pindex,pundex = k_space.get_power_indices()
+
     # Simple k^2 power spectrum with p0 from numpars and a fixed monopole from
-    print len(kindex)
     # the m starting guess
     if params.init_type_p == 'k^2_mon':
-        pspec = np.array((1+kindex)**-2 * numparams.p0)
-        pspec_m_s = m_s.power(pindex=pindex, kindex=kindex, rho=rho_k)
+        pspec = np.array((1+kindex)**-2 * params.p_start)
+        pspec_temp = m.power(pindex=pindex, kindex=kindex, rho=rho_k)
         #see notes, use average power in dirty map to constrain monopole
-        pspec[0] = (np.prod(k_space.vol)**(-2) * utils.log(\
-            np.sqrt(pspec_m_s[0]) *  np.prod(k_space.vol))**2) / 2.
+        if params.highmonopole:
+            pspec[0] = 1.e7
+        else:
+            pspec[0] = (np.prod(k_space.vol)**(-2) * utils.log(\
+                np.sqrt(pspec_temp[0]) *  np.prod(k_space.vol))**2) / 2.
     # default simple k^2 spectrum with free monopole
     elif params.init_type_p == 'k^2':
-        pspec = np.array((1+kindex)**-2 * numparams.p0)    
+        pspec = np.array((1+kindex)**-2 * params.p_start)    
     # constant power spectrum guess 
-    elif params.init_type_p == 'constant':
-        pspec = np.ones(len(kindex)) * numparams.p0
-    # power spectrum from last iteration 
+    elif params.init_type_p == 'const':
+        pspec = np.ones(len(kindex)) * params.p_start
+    # maksim-fastresolve style starting guess
+    elif params.init_type_p == 'structure':
+        pspec = (kindex+k_space.vol[0])**(-3.)
+        fac = 0.15/(4*pspec[1]*k_space.vol.prod()**2)
+        pspec *= fac
+        pspec[0] *= 1.e7
+    # power spectrum file 
     else:
         try:
             logger.message('Using pspec from file '+params.init_type_p)
             pspec = np.load(params.init_type_p)
         except IOError:
-            logger.failure('No pspec file found. Set SG to k^2.')
-            pspec = np.array((1+kindex)**-2 * numparams.p0)
+            logger.failure('No pspec file found.')
+            raise IOError
         
     # check validity of starting pspec guesses
     if np.any(pspec) == 0:
         pspec[pspec==0] = 1e-25
 
     # Wideband mode starting guesses
-    if params.freq == 'wideband':
+    if params.multifrequency:
         
         # Starting guesses for m_a
 
         if params.init_type_a == 'const':
-            m_a = field(s_space, val = numparams.m_a_start)  
+            a = field(s_space, val = params.a_start)
             
         else:
-            m_a = field(s_space, target=s_space.get_codomain(), \
-                val=np.load(params.init_type_a))        
+
+            if params.sg_meanim:
+                a = field(s_space, target=s_space.get_codomain(), \
+                val=zoom(np.load(params.init_type_a),zoom=\
+                    params.zoomfactor).mean())
+            else:    
+                a = field(s_space, target=s_space.get_codomain(), \
+                    val=zoom(np.load(params.init_type_a),zoom=\
+                        params.zoomfactor))
+            
         
         # Spectral index pspec starting guesses
         
+        # Basic k-space
+        k_space_a = s_space.get_codomain()
+        
+        #Adapts the k-space properties if binning is activated.
+        if params.bins_a:
+            k_space_a.set_power_indices(log=True, nbins=params.bins)
+    
+        # k-space properties    
+        kindex_a,rho_k,pindex,pundex = k_space_a.get_power_indices()
+        
         # default simple k^2 spectrum with free monopole
-        if params.init_type_a_p == 'k^2':
-            pspec_a = np.array((1+kindex)**-2 * numparams.p0_a)    
+        if params.init_type_p_a == 'k^2':
+            pspec_a = np.array((1+kindex_a)**-2 * params.p_start_a)
+            pspec_temp = a.power(pindex=pindex, kindex=kindex, rho=rho_k)
+        # k^2 spectrum with fixed monopole
+        if params.init_type_p_a == 'k^2_mon':
+            pspec_a = np.array((1+kindex)**-2 * params.p_start)
+            #see notes, use average power in dirty map to constrain monopole
+            if params.highmonopole_a:
+                pspec_a[0] = 1e7
+            else:
+                pspec_a[0] = (np.prod(k_space.vol)**(-2) * utils.log(\
+                    np.sqrt(pspec_temp[0]) *  np.prod(k_space.vol))**2) / 2.        
         # constant power spectrum guess 
-        elif params.init_type_a_p == 'constant':
-            pspec_a = numparams.p0_a
-        # power spectrum from last iteration 
+        elif params.init_type_p_a == 'const':
+            pspec_a = params.p_start_a
+        # power spectrum from file 
         else:
-            logger.message('using last p-iteration from previous run.')
-            pspec_a = np.load(params.init_type_a_p)
+            try:
+                logger.message('Using pspec from file '+params.init_type_p_a)
+                pspec_a = np.load(params.init_type_p_a)
+            except IOError:
+                logger.failure('No pspec file found.')
+                raise IOError
 
         if np.any(pspec_a) == 0:
             pspec_a[pspec_a==0] = 1e-25
  
     # diagnostic plot of m starting guess
-    utils.save_results(exp(m_s.val),"TI exp(Starting guess)",\
+    utils.save_results(exp(m.val),"TI exp(Starting guess)",\
         'resolve_output_' + str(params.save) + '/m_reconstructions/' +\
         params.save + "_expm0", rho0 = params.rho0)
-    write_output_to_fits(np.transpose(exp(m_s.val)*params.rho0),params, \
+    pars.write_output_to_fits(np.transpose(exp(m.val)*params.rho0),params, \
         notifier='0', mode='I')
-    if params.freq == 'wideband':
-        utils.save_results(m_a.val,"Alpha Starting guess",\
+    if params.multifrequency:
+        utils.save_results(a.val,"Alpha Starting guess",\
             'resolve_output_' + str(params.save) + '/m_reconstructions/' +\
             params.save + "_ma0", rho0 = params.rho0) 
-        write_output_to_fits(np.transpose(m_s.val),params, notifier='0', \
+        pars.write_output_to_fits(np.transpose(a.val),params, notifier='0', \
                mode='a') 
-    if params.algorithm == 'ln-map_u':
-        utils.save_results(exp(m_u.val),"TI exp(Starting guess)",\
+    if params.pointresolve:
+        utils.save_results(exp(u.val),"TI exp(Starting guess)",\
             'resolve_output_' + str(params.save) + '/u_reconstructions/' +\
             params.save + "_expu0", rho0 = params.rho0)    
-        write_output_to_fits(np.transpose(exp(m_u.val)*params.rho0),params, \
+        pars.write_output_to_fits(np.transpose(exp(u.val)*params.rho0),params, \
             notifier='0', mode='I_u')       
                 
-        utils.save_results(exp(m_s.val)+exp(m_u.val),"TI exp(Starting guess)",\
+        utils.save_results(exp(m.val)+exp(u.val),"TI exp(Starting guess)",\
             'resolve_output_' + str(params.save) + '/mu_reconstructions/'+\
             params.save + "_expmu0", rho0 = params.rho0)    
-        write_output_to_fits(np.transpose(exp(m_s.val)+exp(m_u.val)*params.rho0),\
-            params, notifier='0', mode='I_mu')         
+        pars.write_output_to_fits(np.transpose(exp(m.val)+exp(u.val)*\
+            params.rho0), params, notifier='0', mode='I_mu')         
     
-    if ((params.algorithm == 'ln-map' or params.algorithm == 'wf') and (params.freq != 'wideband')):
-        return m_s, pspec, params, k_space
+    # All runs are standard Resolve reconstructions
+    if ((not params.multifrequency) and (not params.pointresolve)):
+        return m, pspec, params, k_space
     
-    elif ((params.algorithm == 'ln-map_u') and (params.freq != 'wideband')):
-        return m_s, pspec, m_u, params, k_space
+    # All runs incorporate Point-Resolve reconstructions but no MF-Resolve
+    elif ((not params.multifrequency) and (params.pointresolve)):
+        return m, pspec, u, params, k_space
 
-    elif ((params.algorithm == 'ln-map') and (params.freq == 'wideband')):
-        return m_s, pspec, m_a, pspec_a, params, k_space
+    # All runs incorporate MF-Resolve reconstructions but no Point-Resolve
+    elif ((params.multifrequency) and (not params.pointresolve)):
+        return m, pspec, a, pspec_a, params, k_space, k_space_a
 
-    elif ((params.algorithm == 'ln-map_u') and (params.freq == 'wideband')):
-        return m_s, pspec, m_u, m_a, pspec_a, params, k_space
+    # All runs incorporate both Point- and MF-Resolve reconstructions
+    elif ((params.multifrequency) and (params.pointresolve)):
+        return m, pspec, u, a, pspec_a, params, k_space, k_space_a
 
 
-def mapfilter_I(d, m, pspec, N, R, logger, k_space, params, numparams,\
-    *args):
+def operator_setup(d, N, R, pspec, m, logger, k_space, \
+    params, a=0., u=0., pspec_a=0., k_space_a=0.):
     """
-    Main standard MAP-filter iteration cycle routine.
     """
-
-    if params.freq == 'wideband':
-        logger.header1("\nBegin total intensity wideband RESOLVE iteration cycle.")  
-    else:
-        logger.header1("\nBegin total intensity standard RESOLVE iteration cycle.")
     
-    s_space = m.domain
+    s_space = R.domain
     kindex = k_space.get_power_indices()[0]
     
-    if params.freq == 'wideband':
+    if params.multifrequency:
         aconst = args[0]
-        wideband_git = args[1]
          
     # Sets the alpha prior parameter for all modes
-    if numparams.alpha_prior:
-        alpha = numparams.alpha_prior
-    else:
-        alpha = np.ones(np.shape(kindex))
+    if params.pspec:
+        if params.alpha_prior:
+            alpha_prior = np.ones(np.shape(kindex)) * params.alpha_prior
+        else:
+            alpha_prior = np.ones(np.shape(kindex))
+        if params.multifrequency:
+            # Sets the spectral index alpha prior parameter for all modes
+            if params.alpha_prior_a:
+                alpha_prior_a =  np.ones(np.shape(kindex)) *\
+                    params.alpha_prior_a
+            else:
+                alpha_prior_a = np.ones(np.shape(kindex))
         
-    # Defines important operators
+    # Defines operators
     S = power_operator(k_space, spec=pspec, bare=True)
-    if params.freq == 'wideband':
-        M = MI_operator(domain=s_space, sym=True, imp=True, para=[N, R, aconst])
+    if params.multifrequency:
+        M = MI_operator(domain=s_space, sym=True, imp=True,\
+            para=[N, R, aconst])
         j = R.adjoint_times(N.inverse_times(d), a = aconst)
     else:    
         M = M_operator(domain=s_space, sym=True, imp=True, para=[N, R])
         j = R.adjoint_times(N.inverse_times(d))
-    D = D_operator(domain=s_space, sym=True, imp=True, para=[S, M, m, j, \
-        numparams.M0_start, params.rho0, params, numparams])
-
+    if (params.pspec or params.uncertainty):
+        if params.pointresolve:
+            D = Dmm_operator(domain=s_space, sym=True, imp=True,\
+                para=[S, M, m, j, params.M0_start, params.rho0, u, params])
+        else:
+            D = D_operator(domain=s_space, sym=True, imp=True, para=[S, M, m,\
+                j, params.M0_start, params.rho0, params])
+        if params.multifrequency:
+            Sa = power_operator(k_space_a, spec=pspec_a, bare=True)
+            Da = Da_operator(domain=s_space, sym=True, imp=True,\
+                para=[Sa, R, N, a, params.M0_start_a, m, d,\
+                params.rho0, params])
+        
     
-    # diagnostic plots
-
-    if params.freq == 'wideband':
+    # diagnostic plots of information source j, aka the dirty image
+    if params.multifrequency:
         utils.save_results(j,"j",'resolve_output_' + str(params.save) +\
-            '/general/' + params.save + \
-            str(wideband_git) + '_j',rho0 = params.rho0)
+            '/general/' + params.save + '_j' + '_mf',rho0 = params.rho0)
     else:
         utils.save_results(j,"j",'resolve_output_' + str(params.save) +\
             '/general/' + params.save + '_j',rho0 = params.rho0)
 
-    # iteration parameters
-    convergence = 0
-    git = 1
-    plist = [pspec]
-    mlist = [m]
-    call = utils.callbackclass(params.save,numparams.map_algo,params.callback) 
-
-    while git <= numparams.global_iter:
-        """
-        Global filter loop.
-        """
-        logger.header2("Starting global iteration #" + str(git) + "\n")
-
-        # update power operator after each iteration step
-        S.set_power(newspec=pspec,bare=True)
-          
-        # uodate operator and optimizer arguments  
-        args = (j, S, M, params.rho0)
-        D.para = [S, M, m, j, numparams.M0_start, params.rho0, params,\
-            numparams]
-
-        if params.uncertainty=='only':
-            logger.haeder2('Only calculating uncertainty map as requested.')
-            D_hat = D.hat(domain=s_space,\
-                ncpu=numparams.ncpu,nrun=numparams.nrun)
-            utils.save_results(D_hat.val,"relative uncertainty", \
-                'resolve_output_' + str(params.save) +\
-                "/D_reconstructions/" + params.save + "_D")
-            return None
-
-        # run minimizer
-        logger.header2("Computing the MAP estimate.\n")
-
-        mold = m
-       
-        if numparams.map_algo == 'sd':
-            en = energy(args)
-            minimize = nt.steepest_descent(en.egg,spam=call.callbackfunc,note=True)
-            m = minimize(x0=m, alpha=numparams.map_alpha, \
-                tol=numparams.map_tol, clevel=numparams.map_clevel, \
-                limii=numparams.map_iter)[0]
-        elif numparams.map_algo == 'lbfgs':
-            logger.warn('lbfgs algorithm implemented from scipy, but'\
-                + ' experimental.')
-            en = energy(args)
-            m = utils.Energy_min(m,en,params,numparams,limii=numparams.map_iter)
-           
-        # save iteration results
-        mlist.append(m)
-        if params.freq == 'wideband':
-            utils.save_results(exp(m.val), "map, iter #" + str(git), \
-                'resolve_output_' + str(params.save) +\
-                '/m_reconstructions/' + params.save + "_expm" +\
-                str(wideband_git) + "_" + str(git), rho0 = params.rho0)
-            write_output_to_fits(np.transpose(exp(m.val)*params.rho0),params, \
-                notifier = str(wideband_git) + "_" + str(git),mode = 'I')
-            # Save residual iteration
-            utils.save_results((R(exp(m)) - d).val, "residual, iter #" + str(git), \
-                'resolve_output_' + str(params.save) +\
-                '/m_reconstructions/' + params.save + "_residual" +\
-                str(wideband_git) + "_" + str(git), rho0 = params.rho0)
-        else:
-            utils.save_results(exp(m.val), "map, iter #" + str(git), \
-                'resolve_output_' + str(params.save) +\
-                '/m_reconstructions/' + params.save + "_expm" + str(git), \
-                rho0 = params.rho0)
-            write_output_to_fits(np.transpose(exp(m.val)*params.rho0),params,\
-                notifier = str(git), mode='I')
-            # Save residual iteration
-            utils.save_results((R(exp(m)) - d).val, "residual, iter #" + str(git), \
-                'resolve_output_' + str(params.save) +\
-                '/m_reconstructions/' + params.save + "_residual" +\
-                str(git), rho0 = params.rho0)
-                
-
-        # check whether to do ecf-like noise update
-        if (params.noise_update and (git==1 or git%3==0)):          
-            # Do a "poor-man's" extended critical filter step using residual
-            logger.header2("Trying simple noise estimate without any D.")
-            #newvar = ((d - R(exp(m)))**2).mean()
-            REG_VAR = 0.9
-            est_var = (R(exp(m)) - d).val
-            est_var = np.abs(est_var)**2
-            est_var = REG_VAR*est_var + (1-REG_VAR)*est_var.mean()
-            logger.message('old variance iteration '+str(git-1)+':' + str(N.diag()))
-            logger.message('new variance iteration '+str(git)+':' + str(newvar))
-            np.save('resolve_output_' + str(params.save) + '/general/oldvar_'+str(git),N.diag())
-            np.save('resolve_output_' + str(params.save) +'/general/newvar_'+str(git),newvar)
-            np.save('resolve_output_' + str(params.save) +'/general/absdmean_'\
-                +str(git),abs(d.val).mean())
-            np.save('resolve_output_' + str(params.save) +'/general/absRmmean_'\
-                +str(git),abs(R(exp(m)).val*R.target.num()).mean())
-            N.para = [newvar*np.ones(np.shape(N.diag()))]
-            M = M_operator(domain=s_space, sym=True, imp=True, para=[N, R])
-            j = R.adjoint_times(N.inverse_times(d))
-
-        # Check whether to do the pspec iteration
-        if params.pspec:
-            logger.header2("Computing the power spectrum.\n")
-
-            # extra loop to take care of possible nans in PS calculation
-            psloop = True
-            M0 = numparams.M0_start
-            while psloop:
-            
-                D.para = [S, M, m, j, M0, params.rho0, params, numparams]
-            
-                Sk = projection_operator(domain=k_space)
-                if params.ftmode == 'wsclean':
-                    #bare=True?
-                    #right now WSclean is not compatible with parallel probing
-                    #due to its internal parallelization
-                    logger.message('Calculating Dhat for pspec reconstruction.')
-                    D_hathat = D.hathat(domain=s_space.get_codomain(),loop=True)
-                    logger.message('Success.')
-                else:
-                   #bare=True?
-                    logger.message('Calculating Dhat for pspec reconstruction.')
-                    D_hathat = D.hathat(domain=s_space.get_codomain(),\
-                        ncpu=numparams.ncpu,nrun=numparams.nrun)
-                    logger.message('Success.') 
-
-                pspec = infer_power(m,domain=Sk.domain,Sk=Sk,D=D_hathat,\
-                    q=1E-42,alpha=alpha,perception=(1,0),smoothness=True,var=\
-                    numparams.smoothing, bare=True)
-
-                if np.any(pspec == False):
-                    print 'D not positive definite, try increasing eta.'
-                    if M0 == 0:
-                        M0 += 0.1
-                    M0 *= 1e6
-                    D.para = [S, M, m, j, M0, params.rho0, params, numparams]
-                else:
-                    psloop = False
-            
-            logger.message("    Current M0:  " + str(D.para[4])+ '\n.')
-
-
-        # check whether to do pspec saves
-        if params.pspec:
-            plist.append(pspec)
-
-            if params.freq == 'wideband':
-                utils.save_results(kindex,"ps, iter #" + str(git), \
-                    'resolve_output_' + str(params.save) + \
-                    "/p_reconstructions/" + params.save + "_p" + \
-                    str(wideband_git) + "_" + str(git), value2=pspec,\
-                    log='loglog')
-            else:
-                utils.save_results(kindex,"ps, iter #" + str(git), \
-                    'resolve_output_' + str(params.save) +\
-                    "/p_reconstructions/" + params.save + "_p" + str(git), \
-                    value2=pspec,log='loglog')
-            
-            # powevol plot needs to be done in place
-            pl.figure()
-            for i in range(len(plist)):
-                pl.loglog(kindex, plist[i], label="iter" + str(i))
-            pl.title("Global iteration pspec progress")
-            pl.legend()
-            pl.savefig('resolve_output_' + str(params.save) + \
-                "/p_reconstructions/" + params.save + "_powevol.png")
-            pl.close()
-        
-        # convergence test in map reconstruction
-        if np.max(np.abs(m - mold)) < params.map_conv:
-            logger.message('Image converged.')
-            convergence += 1
-        
-        # convergence test in power spectrum reconstruction 
-        if np.max(np.abs(utils.log(pspec)/utils.log(S.get_power()))) < utils.log(1e-1):
-            logger.message('Power spectrum converged.')
-            convergence += 1
-        
-        #global convergence test
-        if convergence >= numparams.final_convlevel:
-            logger.message('Global convergence achieved at iteration' + \
-                str(git) + '.')
-            if params.uncertainty=='supp':
-                logger.message('Calculating uncertainty map at end of'\
-                    +'recpnstruction, as requested.')
-                D_hat = D.hat(domain=s_space,\
-                ncpu=numparams.ncpu,nrun=numparams.nrun)
-                utils.save_results(D_hat.val,"relative uncertainty", \
-                    'resolve_output_' + str(params.save) +\
-                    "/D_reconstructions/" + params.save + "_D")
-                
-            return m, pspec
-
-        git += 1
-
-    return m, pspec
     
+    # All runs are without pspec, uncertainty and MF 
+    if ((not params.multifrequency) and (not params.pspec)\
+        and (not params.uncertainty)):
+        return j, M, S
+
+    # All runs are with pspec and/or uncertainty but without MF
+    elif ((not params.multifrequency) and (params.pspec \
+        or params.uncertainty)):
+        return j, M, D, S, alpha_prior
+        
+    # All runs are with pspec and/or uncertainty and with MF
+    elif (params.multifrequency and (params.pspec \
+        or params.uncertainty)):
+        return j, M, D, S, alpha_prior, Da, Sa, alpha_prior_a
+        
+def check_global_convergence(convergence, runlist_element, params, logger):
     
-def mapfilter_I_u(d, m,u, pspec, N, R, logger, k_space, params, numparams,\
-    *args):
-    """
-    """
-    scipyminimizer = ('TNC','COBYLA','SLSQP','dogleg','trust-ncg',\
-        'CG','BFGS', 'L-BFGS-B','Nelder-Mead','Powell','Newton-CG')
-    
-    if params.freq == 'wideband':
-        logger.header1("Begin total intensity wideband Point-RESOLVE iteration cycle.")
+    if convergence >= params.final_convlevel:
+        logger.message('Global convergence achieved at runlist step'\
+            + runlist_element + '.')
+        return True
     else:
-        logger.header1("Begin total intensity Point-RESOLVE iteration cycle.")  
+        return False
+
+# contains all the final plotting routines to keep them out of main
+def finalplots(params, m, pspec, k_space, u=None, a=None, pspec_a=None, 
+               k_space_a=None, powspec_sim=None):
     
-    s_space = m.domain
-    kindex = k_space.get_power_indices()[0]
-                 
-    if params.freq == 'wideband':
-        aconst = args[0]
-        wideband_git = args[1]
+    utils.plot_figure_with_axes(exp(m.val), "exp(Solution m)", 
+                          'resolve_output_' + str(params.save) +
+                           '/m_reconstructions/' + params.save + "_expmfinal",
+                          params, cmap='Greys', rho0=params.rho0)
+    pars.write_output_to_fits(np.transpose(exp(m.val)*params.rho0),\
+        params, notifier='final',mode='I')
+    
+    if params.pspec:
+        utils.save_results(k_space.get_power_indices()[0],\
+                     "final power spectrum", 'resolve_output_' +\
+                     str(params.save) + '/p_reconstructions/' + params.save +\
+                     "_powfinal", value2 = pspec, log='loglog')
+    
+    if params.multifrequency:
+        utils.plot_figure_with_axes(a.val, "Solution a", 'resolve_output_' + 
+                          str(params.save) + '/m_reconstructions/' +
+                          params.save + "_mafinal", params,
+                          cmap='Greys', rho0=params.rho0)
+        pars.write_output_to_fits(np.transpose(a.val),params,\
+        notifier ='final', mode='a')
         
-    # Sets the alpha prior parameter for all modes
-    if numparams.alpha_prior:
-        alpha = numparams.alpha_prior
+        utils.save_results(k_space_a.get_power_indices()[0],\
+                     "final spectral index power spectrum",\
+                     'resolve_output_' + str(params.save) +\
+                     '/p_reconstructions/' + params.save +\
+                     "_powfinal_a", value2 = pspec_a, log='loglog')
+    
+    
+    if params.pointresolve:     
+        utils.save_results(exp(u.val),"exp(Solution u)",\
+            'resolve_output_' + str(params.save) + '/u_reconstructions/' + \
+            params.save + "_expufinal", rho0 = params.rho0)
+        utils.plot_figure_with_axes(exp(u.val), "exp(Solution u)",  
+                           'resolve_output_' + str(params.save) + 
+                          '/u_reconstructions/' + params.save + "_expufinal", 
+                          params, cmap='Greys', rho0=params.rho0)
+        pars.write_output_to_fits(np.transpose(exp(u.val)*params.rho0),\
+            params, notifier='final',mode='I_u')
+    
+    if params.simulating:
+        
+        pl.figure()
+        pl.loglog(k_space.get_power_indices()[0], pspec, label="final")
+        pl.loglog(k_space.get_power_indices()[0],powspec_sim,\
+            label="simulated") 
+        pl.title("Compare final and simulated power spectrum")
+        pl.legend()
+        pl.savefig("resolve_output_" + str(params.save) +"/p_reconstructions/"\
+            + params.save + "_compare.png")
+        pl.close()
+    
+    
+    
+
+# helper function that adjusts a requested uvcut during a specific runfile
+# command        
+def adjust_uvcut(d, N, R, uvcut, uvcutval):
+
+    u = R.u
+    v = R.v
+    dval = d.val
+    
+    if uvcut == 'smaller':
+        mask = (np.sqrt(u**2+v**2) < uvcutval)
+    elif uvcut == 'larger':
+        mask = (np.sqrt(u**2+v**2) > uvcutval)
+        
+    u = np.delete(u,np.where(mask==0))
+    R.u = u
+    v = np.delete(v,np.where(mask==0))
+    R.v = v
+    
+    dval = np.delete(dval,np.where(mask==0))
+    d_space = point_space(len(dval), datatype = np.complex128)
+    d = field(d_space, val=dval)
+    R.target = d_space
+    
+    Ndiag = N.diag()
+    Ndiag = np.delete(Ndiag,np.where(mask==0))
+    N = diagonal_operator(domain=d_space,diag=Ndiag)
+    
+    return d, N, R, d_space       
+
+# readjusts all data/uv operators after a runfile command that requested
+# a uvcut and or fastresolve mode 
+def readjust_uv(dorgval, Norgdiag, s_space, u, v, A):
+    
+    d_space = point_space(len(dorgval), datatype = np.complex128)
+    d = field(d_space, val=dorgval)
+    N = diagonal_operator(domain=d_space,diag=Norgdiag)
+    if params.ftmode == 'wsclean':
+        # uv arbitrarily set to 0, not needed
+        R = r.response(s_space, d_space, 0, 0, A, mode = params.ftmode,
+                          wscOP=wscOP)
     else:
-        alpha = np.ones(np.shape(kindex))
-
-    # Defines important operators    
-    S = power_operator(k_space, spec=pspec, bare=True)
-    if params.freq == 'wideband':
-        M = MI_operator(domain=s_space, sym=True, imp=True, para=[N, R, aconst])
-        j = R.adjoint_times(N.inverse_times(d), a = aconst)
-    else:    
-        M = M_operator(domain=s_space, sym=True, imp=True, para=[N, R])
-        j = R.adjoint_times(N.inverse_times(d))
-    D = Dmu_operator(domain=s_space, sym=True, imp=True, para=[S, M, m, j, \
-        numparams.M0_start, params.rho0, u, params, numparams])
-   
-    #diagnostic plots    
-    if params.freq == 'wideband':
-        utils.save_results(j,"j",'resolve_output_' + str(params.save) +\
-        '/general/' + params.save + \
-            str(wideband_git) + '_j',rho0 = params.rho0)
-    else:
-        utils.save_results(j,"j",'resolve_output_' + str(params.save) +\
-            '/general/' + params.save + '_j',rho0 = params.rho0)
+        R = r.response(s_space, d_space, u, v, A, mode=
+                          params.ftmode)
     
-    # iteration parameters
-    convergence = 0
-    git = 1
-    algo_run = 0
-    plist = [pspec]
-    mlist = [m]    
-    call = utils.callbackclass(params.save,numparams.map_algo,params.callback)     
+    return d, N, R, d_space
 
-    while git <= numparams.global_iter:
-        """
-        Global filter loop.
-        """
-
-        logger.header2("Starting global up iteration #" + str(git) + "\n")
-
-        # update power operator after each iteration step
-        S.set_power(newspec=pspec,bare=True)
-          
-        # uodate operator and optimizer arguments  
-        D.para = [S, M, m, j, numparams.M0_start, params.rho0,u, params, numparams]
-
-        # Check whether to only calculte an uncertainty map
-        if params.uncertainty=='only':
-            logger.message('Only calculating uncertainty map as requested.')
-            D_hat = D.hat(domain=s_space,\
-                ncpu=numparams.ncpu,nrun=numparams.nrun)
-            utils.save_results(D_hat.val,"relative uncertainty", \
-                'resolve_output_' + str(params.save) +\
-                "/D_reconstructions/" + params.save + "_D")
-            return None
-
-
-        #run nifty minimizer steepest descent class
-
-        mold = m
-        uold = u
-        args = (j, S, M, params.rho0, numparams.beta, numparams.eta,m,u)
-        en = energy_mu(args)
-        if numparams.algo_liste[algo_run] == 'sd_u':
-
-            logger.header2("Computing the u-MAP estimate.\n")
-            minimize = nt.steepest_descent(en.egg_u,spam=call.callbackfunc_u,\
-                note=True)
-            u = minimize(x0=u, alpha=numparams.map_alpha_u, \
-                tol=numparams.map_tol_u, clevel=numparams.map_clevel_u, \
-                limii=numparams.map_iter_u)[0]
-                
-            utils.save_u(u,git,params)          
-            utils.save_mu(m,u,git,params)        
-            # convergence test in s/u-map reconstruction 
-            if np.max(np.abs(u - uold)) < params.map_conv:
-                logger.message('Compact image converged.')
-                convergence += 1     
-                
-        elif numparams.algo_liste[algo_run] == 'sd_m':
-               
-            logger.header2("Computing the m-MAP estimate.\n")   
-            minimize = nt.steepest_descent(en.egg_s,spam=call.callbackfunc_m,\
-                note=True)
-            m = minimize(x0=m, alpha=numparams.map_alpha, \
-                tol=numparams.map_tol, clevel=numparams.map_clevel, \
-                limii=numparams.map_iter)[0]   
-                
-            if params.freq == 'wideband':
-                utils.save_m(m,git,params,wideband_git)                       
-            else:
-                utils.save_m(m,git,params)  
-            mlist.append(m)
-            utils.save_mu(m,u,git,params)  
-            # convergence test in s/u-map reconstruction             
-            if np.max(np.abs(m - mold)) < params.map_conv:
-                logger.message('Extended image converged.')
-                convergence += 1                    
-
-       
-        elif numparams.algo_liste[algo_run] in scipyminimizer:
-            logger.warn(numparams.algo_liste[algo_run]+' algorithm implemented from scipy, but'\
-                + ' experimental.')
-            m,u = utils.Energy_min(m,en,params,numparams,numparams.algo_liste[algo_run],numparams.map_iter, x1 = u)
-
-            if params.freq == 'wideband':
-                utils.save_m(m,git,params,wideband_git)                       
-            else:
-                utils.save_m(m,git,params)  
-            mlist.append(m)
-            utils.save_u(u,git,params)
-            utils.save_mu(m,u,git,params)  
-        # convergence test in s/u-map reconstruction
-            if np.max(np.abs(m - mold)) < params.map_conv and np.max(np.abs(u - uold)) < params.map_conv:
-                logger.message('Image converged.')
-                convergence += 1            
-                
-        #temporary
-        elif numparams.algo_liste[algo_run] == 'test_u':
-             u = utils.Energy_min(u,en,params,numparams,'L-BFGS-B',numparams.map_iter_u, x1 = None,pure='pure_u')
-             utils.save_u(u,git,params)          
-             utils.save_mu(m,u,git,params)   
-             
-        elif numparams.algo_liste[algo_run] == 'test_m':
-             m = utils.Energy_min(m,en,params,numparams,'L-BFGS-B',numparams.map_iter, x1 = None,pure='pure_m')
-             utils.save_m(m,git,params)          
-             utils.save_mu(m,u,git,params)              
-        #temporary
-            
-        # pure compact field reconstruction
-        elif numparams.algo_liste[algo_run] == 'pure_points':
-            args = (j, S, M, params.rho0, numparams.beta, numparams.eta)
-            en = energy_u(args)  
-            minimize = nt.steepest_descent(en.egg_u,spam=call.callbackfunc_u,note=True)
-            u = minimize(x0=u, alpha=numparams.map_alpha_u, \
-               tol=numparams.map_tol_u, clevel=numparams.map_clevel_u, \
-               limii=numparams.map_iter_u)[0]
-            utils.save_u(u,git,params)    
-            # convergence test in s/u-map reconstruction 
-            if np.max(np.abs(u - uold)) < params.map_conv:
-                logger.message('Compact image converged.')
-                convergence += 1     
-
-        # check whether to do ecf-like noise update              
-        elif numparams.algo_liste[algo_run] == 'update_noise':        
-        #if params.noise_update:
-            # Do a "poor-man's" extended critical filter step using residual
-            logger.header2("Trying simple noise estimate without any D.")
-            newvar = (np.abs((d.val - R(exp(m)+exp(u)))**2).mean())
-            logger.message('old variance iteration '+str(git-1)+':' + str(N.diag()))
-            logger.message('new variance iteration '+str(git)+':' + str(newvar))
-            np.save('resolve_output_' + str(params.save) + 'oldvar_'+str(git),N.diag())
-            np.save('resolve_output_' + str(params.save) +'newvar_'+str(git),newvar)
-            np.save('resolve_output_' + str(params.save) +'absdmean_'\
-                +str(git),abs(d.val).mean())
-            np.save('resolve_output_' + str(params.save) +'absRmmean_'\
-                +str(git),abs(R(m).val*R.target.num()).mean())
-            N.para = [newvar*np.ones(np.shape(N.diag()))]
-        
-        # Check whether to do the pspec iteration
-        elif numparams.algo_liste[algo_run]=='ps_rec':
-            logger.header2("Computing the power spectrum.\n")
-
-            #extra loop to take care of possible nans in PS calculation
-            psloop = True
-            M0 = numparams.M0_start
-                  
-            while psloop:
-            
-                D.para = [S, M, m, j, M0, params.rho0,u, params, numparams]
-            
-                Sk = projection_operator(domain=k_space)
-                if params.ftmode == 'wsclean':
-                    #bare=True?
-                    #right now WSclean is not compatible with parallel probing
-                    #due to its internal parallelization
-                    logger.message('Calculating Dhat for pspec reconstruction.')
-                    D_hathat = D.hathat(domain=s_space.get_codomain(),loop=True)
-                    logger.message('Success.')
-                else:
-                   #bare=True?
-                    logger.message('Calculating Dhat for pspec reconstruction.')
-                    D_hathat = D.hathat(domain=s_space.get_codomain(),\
-                        ncpu=numparams.ncpu,nrun=numparams.nrun)
-                    logger.message('Success.')
-
-                pspec = infer_power(m,domain=Sk.domain,Sk=Sk,D=D_hathat,\
-                    q=1E-42,alpha=alpha,perception=(1,0),smoothness=True,var=\
-                    numparams.smoothing, bare=True)
-
-                if np.any(pspec == False):
-                    print 'D not positive definite, try increasing eta.'
-                    if M0 == 0:
-                        M0 += 0.1
-                    M0 *= 1e6
-                    D.para = [S, M, m, j, M0, params.rho0, params, numparams]
-                else:
-                    psloop = False
-            
-            logger.message("    Current M0:  " + str(D.para[4])+ '\n.')
-
-        # check whether to do pspec saves
-            if params.pspec:
-                plist.append(pspec)
-                utils.save_results(kindex,"ps, iter #" + str(git), \
-                    'resolve_output_' + str(params.save) +\
-                    "/p_reconstructions/" + params.save + "_p" + str(git)+"_up", \
-                    value2=pspec,log='loglog')
-            
-            # powevol plot needs to be done in place
-                pl.figure()
-                for i in range(len(plist)):
-                    pl.loglog(kindex, plist[i], label="iter" + str(i))
-                pl.title("Global iteration pspec progress")
-                pl.legend()
-                pl.savefig("resolve_output_" + str(params.save) +"/p_reconstructions/"\
-                     + params.save + "_up_powevol.png")
-                pl.close()
-        # convergence test in power spectrum reconstruction 
-            if np.max(np.abs(utils.log(pspec)/utils.log(S.get_power()))) < utils.log(1e-1):
-                logger.message('Power spectrum converged.')
-                convergence += 1
-        
-        #global convergence test
-        if convergence >= numparams.final_convlevel:
-            logger.message('Global convergence achieved at iteration' + \
-                str(git) + '.')
-            if params.uncertainty=='supp':
-                logger.message('Calculating uncertainty map as requested.')
-                D_hat = D.hat(domain=s_space,\
-                ncpu=numparams.ncpu,nrun=numparams.nrun)
-                utils.save_results(D_hat.val,"relative uncertainty", \
-                    'resolve_output_' + str(params.save) +\
-                    "/D_reconstructions/" + params.save + "_D")
-                
-            return m,u, pspec
-
-        if algo_run == len(numparams.algo_liste)-1:
-           algo_run = 0
-           git += 1
-        else:
-           algo_run += 1
-
-    return m,u, pspec
-    
-
-
-def mapfilter_a(d, m, pspec, N, R, logger, k_space, params, numparams,\
-    m_s, wideband_git):
-    """
-    """
-
-    logger.header1("Begin spectral index wideband RESOLVE iteration cycle.")  
-      
-    s_space = m.domain
-    kindex = k_space.get_power_indices()[0]
-    
-    mconst = m_s
-         
-    # Sets the alpha prior parameter for all modes
-    if numparams.alpha_prior_a:
-        alpha = numparams.alpha_prior_a
-    else:
-        alpha = np.ones(np.shape(kindex))
-        
-    # Defines important operators. M and j are defined implicitly in energy_a
-    S = power_operator(k_space, spec=pspec, bare=True)
-    D = Da_operator(domain=s_space, sym=True, imp=True, para=[S, R, N, m,\
-            numparams.M0_start_a, mconst, d, params.rho0, params, numparams])
-    
-
-    # iteration parameters
-    convergence = 0
-    git = 1
-    plist = [pspec]
-    mlist = [m]
-    call = utils.callbackclass(params.save,numparams.map_algo,params.callback) 
-
-    while git <= numparams.global_iter_a:
-        """
-        Global filter loop.
-        """
-        logger.header2("Starting spectral index "+
-            "subiteration #" + str(git) + "\n")
-
-        # update power operator after each iteration step
-        S.set_power(newspec=pspec,bare=True)
-          
-        # uodate operator and optimizer arguments  
-        args = (d,S, N, R,mconst)
-        D.para = [S, R, N, m, numparams.M0_start_a, params.rho0, mconst, d,\
-            params, numparams]
-        
-        if params.uncertainty_a=='only':
-            logger.message('Only calculating alpha uncertainty as requested.')
-            D_hat = D.hat(domain=s_space,\
-                ncpu=numparams.ncpu,nrun=numparams.nrun)
-            utils.save_results(D_hat.val,"relative uncertainty", \
-                'resolve_output_' + str(params.save) +\
-                "/D_reconstructions/" + params.save + "_D")
-            return None
-
-        #run nifty minimizer steepest descent class
-        logger.header2("Computing the spectral index MAP estimate.\n")
-
-        mold = m
-        
-        if numparams.map_algo == 'sd':
-            en = energy_a(args)
-            minimize = nt.steepest_descent(en.egg,spam=call.callbackfunc,note=True)
-            m = minimize(x0=m, alpha=numparams.map_alpha_a, \
-                tol=numparams.map_tol_a, clevel=numparams.map_clevel_a, \
-                limii=numparams.map_iter_a)[0]
-        elif numparams.map_algo == 'lbfgs':
-            logger.warn('lbfgs algorithm implemented from scipy, but'\
-            + 'experimental.')
-            m = utils.BFGS(m,j,S,M,rho0,params,limii=numparams.map_iter_a)
-        
-        mlist.append(m)   
-        utils.save_results(m.val, "map, iter #" + str(git), \
-            'resolve_output_' + str(params.save) +\
-            "/m_reconstructions/" + params.save + "_ma" + \
-            str(wideband_git) + "_" + str(git), rho0 = params.rho0)
-        write_output_to_fits(np.transpose(m.val),params, \
-        notifier = str(wideband_git) + "_" + str(git), mode='a')
-        
-
-        if params.pspec_a:
-            logger.header2("Computing the power spectrum.\n")
-            
-    
-            #extra loop to take care of possible nans in PS calculation
-            psloop = True
-            M0 = numparams.M0_start_a
-            while psloop:
-                
-                D.para = [S, R, N, m, numparams.M0_start_a, params.rho0,\
-                mconst, d, params, numparams]
-                
-                Sk = projection_operator(domain=k_space)
-                if params.ftmode == 'wsclean':
-                    #bare=True?
-                    #right now WSclean is not compatible with parallel probing
-                    #due to its internal parallelization
-                    logger.message('Calculating Dhat for pspec reconstruction.')
-                    D_hathat = D.hathat(domain=s_space.get_codomain(),loop=True)
-                    logger.message('Success.')
-                else:
-                   #bare=True?
-                    logger.message('Calculating Dhat for pspec reconstruction.')
-                    D_hathat = D.hathat(domain=s_space.get_codomain(),\
-                        ncpu=numparams.ncpu,nrun=numparams.nrun)
-                    logger.message('Success.')
-
-    
-                pspec = infer_power(m,domain=Sk.domain,Sk=Sk,D=D_hathat,\
-                    q=1E-42,alpha=alpha,perception=(1,0),smoothness=True,var=\
-                    numparams.smoothing_a, bare=True)
-    
-                if np.any(pspec == False):
-                    logger.message('D not positive definite, try increasing'\
-                        +'eta.')
-                    if M0 == 0:
-                        M0 += 0.1
-                    M0 *= 1e6
-                    D.para = [S, M, m, j, M0, params.rho0, params, numparams]
-                else:
-                    psloop = False
-                
-            logger.message("    Current M0:  " + str(D.para[4])+ '\n.')
-
-
-        if params.pspec_a:
-            plist.append(pspec)
-            utils.save_results(kindex,"ps, iter #" + str(git), \
-                'resolve_output_' + str(params.save) +\
-                "/p_reconstructions/" + params.save + "_pa" + \
-                str(wideband_git) + "_" + str(git), value2=pspec,log='loglog')
-            
-            # powevol plot needs to be done in place
-            pl.figure()
-            for i in range(len(plist)):
-                pl.loglog(kindex, plist[i], label="iter" + str(i))
-            pl.title("Global iteration pspec progress")
-            pl.legend()
-            pl.savefig('resolve_output_' + str(params.save) +\
-                "/p_reconstructions/" + params.save + "_powevol.png")
-            pl.close()
-        
-        # convergence test in map reconstruction
-        if np.max(np.abs(m - mold)) < params.map_conv:
-            logger.message('Image converged.')
-            convergence += 1
-        
-        # convergence test in power spectrum reconstruction
-        if params.pspec_a:
-            if np.max(np.abs(utils.log(pspec)/utils.log(S.get_power())))\
-                < utils.log(1e-1):
-                    logger.message('Power spectrum converged.')
-                    convergence += 1
-        
-        #global convergence test
-        if convergence >= numparams.final_convlevel:
-            logger.message('Global convergence achieved at iteration' + \
-                str(git) + '.')
-            if params.uncertainty_a=='supp':
-                logger.message('Calculating alpha uncertainty as requested.')
-                D_hat = D.hat(domain=s_space,\
-                ncpu=numparams.ncpu_a,nrun=numparams.nrun_a)
-                utils.save_results(D_hat.val,"relative uncertainty", \
-                    'resolve_output_' + str(params.save) +\
-                    "/D_reconstructions/" + params.save + "_Da")
-                
-            return m, pspec
-
-        git += 1
-
-    return m, pspec
-
-def wienerfilter(d, m, pspec, N, R, logger, k_space, params, numparams,\
-    *args):
-    """
-    Main Wienerfilter iteration cycle routine.
-    """
-
-    if params.freq == 'wideband':
-        logger.header1("Begin total intensity wideband Wiener Filter" \
-            + "iteration cycle.")  
-    else:
-        logger.header1("Begin total intensity standard Wiener Filter" \
-                    + "iteration cycle.")
-    
-    s_space = m.domain
-    kindex = k_space.get_power_indices()[0]
-                           
-    # Sets the alpha prior parameter for all modes
-    if numparams.alpha_prior:
-        alpha = numparams.alpha_prior
-    else:
-        alpha = np.ones(np.shape(kindex))
-    
-    if params.freq == 'wideband':
-        aconst = args[0]
-        wideband_git = args[1]
-        
-    # Defines important operators
-    S = power_operator(k_space, spec=pspec, bare=True)
-    if params.freq == 'wideband':
-        M = MI_operator(domain=s_space, sym=True, imp=True, para=[N, R, aconst])
-        j = R.adjoint_times(N.inverse_times(d), a = aconst)
-    else:    
-        M = M_operator(domain=s_space, sym=True, imp=True, para=[N, R])
-        j = R.adjoint_times(N.inverse_times(d))
-    D = D_operator(domain=s_space, sym=True, imp=True, para=[S, M, m, j, \
-        numparams.M0_start, params.rho0, params, numparams])
-
-    
-    # diagnostic plots
-
-    if params.freq == 'wideband':
-        utils.save_results(j,"j",'resolve_output_' + str(params.save) +\
-            '/general/' + params.save + \
-            str(wideband_git) + '_j',rho0 = params.rho0)
-    else:
-        utils.save_results(j,"j",'resolve_output_' + str(params.save) +\
-            '/general/' + params.save + '_j',rho0 = params.rho0)
-
-    # iteration parameters
-    convergence = 0
-    git = 1
-    plist = [pspec]
-    mlist = [m]
-    
-
-    while git <= numparams.global_iter:
-        """
-        Global filter loop.
-        """
-        logger.header2("Starting global iteration #" + str(git) + "\n")
-
-        # update power operator after each iteration step
-        S.set_power(newspec=pspec,bare=True)
-          
-        # uodate operator and optimizer arguments  
-        args = (j, S, M, params.rho0)
-        D.para = [S, M, m, j, numparams.M0_start, params.rho0, params,\
-            numparams]
-
-        if params.uncertainty=='only':
-            logger.message('Only calculating uncertainty map as requested.')
-            D_hat = D.hat(domain=s_space,\
-                ncpu=numparams.ncpu,nrun=numparams.nrun)
-            utils.save_results(D_hat.val,"relative uncertainty", \
-                'resolve_output_' + str(params.save) +\
-                "/D_reconstructions/" + params.save + "_D")
-            return None
-
-        # run minimizer
-        logger.header2("Computing the WF estimate.\n")
-
-        mold = m
-
-        m = D(j)       
-
-        # save iteration results
-        mlist.append(m)
-        if params.freq == 'wideband':
-            utils.save_results(m.val, "map, iter #" + str(git), \
-                'resolve_output_' + str(params.save) +\
-                '/m_reconstructions/' + params.save + "_m_WF" +\
-                str(wideband_git) + "_" + str(git), rho0 = params.rho0)
-            write_output_to_fits(np.transpose(m.val*params.rho0),params, \
-                notifier = str(wideband_git) + "_" + str(git),mode = 'I')
-        else:
-            utils.save_results(m.val, "map, iter #" + str(git), \
-                'resolve_output_' + str(params.save) +\
-                '/m_reconstructions/' + params.save + "_m_WF" + str(git), \
-                rho0 = params.rho0)
-            write_output_to_fits(np.transpose(m.val*params.rho0),params,\
-                notifier = str(git), mode='I')
-
-        # check whether to do ecf-like noise update
-        if params.noise_update:
-            
-            # Do a "poor-man's" extended critical filter step using residual
-            logger.header2("Trying simple noise estimate without any D.")
-            newvar = (np.abs((d.val - R(m))**2).mean())
-            logger.message('old variance iteration '+str(git-1)+':' + str(N.diag()))
-            logger.message('new variance iteration '+str(git)+':' + str(newvar))
-            np.save('resolve_output_' + str(params.save) + 'oldvar_'+str(git),N.diag())
-            np.save('resolve_output_' + str(params.save) +'newvar_'+str(git),newvar)
-            np.save('resolve_output_' + str(params.save) +'absdmean_'\
-                +str(git),abs(d.val).mean())
-            np.save('resolve_output_' + str(params.save) +'absRmmean_'\
-                +str(git),abs(R(m).val*R.target.num()).mean())
-            N.para = [newvar*np.ones(np.shape(N.diag()))]
-
-        # Check whether to do the pspec iteration
-        if params.pspec:
-            logger.header2("Computing the power spectrum.\n")
-
-            # extra loop to take care of possible nans in PS calculation
-            psloop = True
-            M0 = numparams.M0_start
-            while psloop:
-            
-                D.para = [S, M, m, j, M0, params.rho0, params, numparams]
-            
-                Sk = projection_operator(domain=k_space)
-                #bare=True?
-                logger.message('Calculating Dhat for pspec reconstruction.')
-                D_hathat = D.hathat(domain=s_space.get_codomain(),\
-                    ncpu=numparams.ncpu,nrun=numparams.nrun)
-                logger.message('Success.')
-
-                pspec = infer_power(m,domain=Sk.domain,Sk=Sk,D=D_hathat,\
-                    q=1E-42,alpha=alpha,perception=(1,0),smoothness=True,var=\
-                    numparams.smoothing, bare=True)
-
-                if np.any(pspec == False):
-                    print 'D not positive definite, try increasing eta.'
-                    if M0 == 0:
-                        M0 += 0.1
-                    M0 *= 1e6
-                    D.para = [S, M, m, j, M0, params.rho0, params, numparams]
-                else:
-                    psloop = False
-            
-            logger.message("    Current M0:  " + str(D.para[4])+ '\n.')
-
-
-        # check whether to do pspec saves
-        if params.pspec:
-            plist.append(pspec)
-
-            if params.freq == 'wideband':
-                utils.save_results(kindex,"ps, iter #" + str(git), \
-                    'resolve_output_' + str(params.save) + \
-                    "/p_reconstructions/" + params.save + "_p" + \
-                    str(wideband_git) + "_" + str(git), value2=pspec,\
-                    log='loglog')
-            else:
-                utils.save_results(kindex,"ps, iter #" + str(git), \
-                    'resolve_output_' + str(params.save) +\
-                    "/p_reconstructions/" + params.save + "_p" + str(git), \
-                    value2=pspec,log='loglog')
-            
-            # powevol plot needs to be done in place
-            pl.figure()
-            for i in range(len(plist)):
-                pl.loglog(kindex, plist[i], label="iter" + str(i))
-            pl.title("Global iteration pspec progress")
-            pl.legend()
-            pl.savefig('resolve_output_' + str(params.save) + \
-                "/p_reconstructions/" + params.save + "_powevol.png")
-            pl.close()
-        
-        # convergence test in map reconstruction
-        if np.max(np.abs(m - mold)) < params.map_conv:
-            logger.message('Image converged.')
-            convergence += 1
-        
-        # convergence test in power spectrum reconstruction 
-        if np.max(np.abs(utils.log(pspec)/utils.log(S.get_power()))) < utils.log(1e-1):
-            logger.message('Power spectrum converged.')
-            convergence += 1
-        
-        #global convergence test
-        if convergence >= numparams.final_convlevel:
-            logger.message('Global convergence achieved at iteration' + \
-                str(git) + '.')
-            if params.uncertainty=='supp':
-                logger.message('Calculating uncertainty map at end of'\
-                    +'recpnstruction, as requested.')
-                D_hat = D.hat(domain=s_space,\
-                ncpu=numparams.ncpu,nrun=numparams.nrun)
-                utils.save_results(D_hat.val,"relative uncertainty", \
-                    'resolve_output_' + str(params.save) +\
-                    "/D_reconstructions/" + params.save + "_D")
-                
-                
-            return m, pspec
-
-        git += 1
-
-    return m, pspec
-
-def ML(d, m, pspec, N, R, logger, k_space, params, numparams,\
-    *args):
-    """
-    Maximum Likelihood estimation.
-    """
-
-    if params.freq == 'wideband':
-        logger.header1("Begin total intensity wideband Wiener Filter" \
-            + "iteration cycle.")  
-    else:
-        logger.header1("Begin total intensity standard Wiener Filter" \
-                    + "iteration cycle.")
-    
-    s_space = m.domain
-    kindex = k_space.get_power_indices()[0]
-    
-    if params.freq == 'wideband':
-        aconst = args[0]
-        wideband_git = args[1]
-        
-    # Defines important operators
-    if params.freq == 'wideband':
-        M = MI_operator(domain=s_space, sym=True, imp=True, para=[N, R, aconst])
-        j = R.adjoint_times(N.inverse_times(d), a = aconst)
-    else:    
-        M = M_operator(domain=s_space, sym=True, imp=True, para=[N, R])
-        j = R.adjoint_times(N.inverse_times(d))
-    D = D_operator(domain=s_space, sym=True, imp=True, para=[0, M, m, j, \
-        numparams.M0_start, params.rho0, params, numparams])
-
-    
-    # diagnostic plots
-
-    if params.freq == 'wideband':
-        utils.save_results(j,"j",'resolve_output_' + str(params.save) +\
-            '/general/' + params.save + \
-            str(wideband_git) + '_j',rho0 = params.rho0)
-    else:
-        utils.save_results(j,"j",'resolve_output_' + str(params.save) +\
-            '/general/' + params.save + '_j',rho0 = params.rho0)
-
-    # iteration parameters
-    git = 1
-    mlist = [m]
-    
-          
-    args = (j, 0, M, params.rho0)
-    D.para = [0, M, m, j, numparams.M0_start, params.rho0, params,\
-        numparams]
-
-    if params.uncertainty=='only':
-        logger.message('Only calculating uncertainty map as requested.')
-        D_hat = D.hat(domain=s_space,\
-            ncpu=numparams.ncpu,nrun=numparams.nrun)
-        utils.save_results(D_hat.val,"relative uncertainty", \
-            'resolve_output_' + str(params.save) +\
-            "/D_reconstructions/" + params.save + "_D")
-        return None
-
-    # run minimizer
-    logger.header2("Computing the ML estimate.\n")
-
-    m = D(j)       
-
-    # save iteration results
-    mlist.append(m)
-    if params.freq == 'wideband':
-        utils.save_results(m.val, "map, iter #" + str(git), \
-            'resolve_output_' + str(params.save) +\
-            '/m_reconstructions/' + params.save + "_m_WF" +\
-            str(wideband_git) + "_" + str(git), rho0 = params.rho0)
-        write_output_to_fits(np.transpose(m.val*params.rho0),params, \
-            notifier = str(wideband_git) + "_" + str(git),mode = 'I')
-    else:
-        utils.save_results(m.val, "map, iter #" + str(git), \
-            'resolve_output_' + str(params.save) +\
-            '/m_reconstructions/' + params.save + "_m_WF" + str(git), \
-            rho0 = params.rho0)
-        write_output_to_fits(np.transpose(m.val*params.rho0),params,\
-            notifier = str(git), mode='I')
-
-
-    return m 
-        
-#-------------------parameter classes & code I/O-------------------------------
-        
-class parameters(object):
-    """
-    Defines a parameter class for all parameters that are vital to controlling
-    basic functionality of the code. Some are even mandatory and given by 
-    the user. Performs checks on default arguments with hard-coded default
-    values.
-    """
-
-    def __init__(self, parset, save, verbosity):
-
-        #mandatory parameters
-        self.ms = parset['ms']
-        self.imsize = int(parset['imsize'])
-        self.cellsize = float(parset['cellsize'])
-        
-        #non-parset parameters dealing with code-system interactions
-        self.save = save
-        self.verbosity = verbosity
-        
-        #main parameters that often need to be set by the user but have default
-        #values
-        self.check_default('algorithm', parset, 'ln-map')
-        self.check_default('stokes', parset, 'I')
-        self.check_default('ftmode', parset, 'gfft')
-        if self.ftmode == 'wsclean' and wsclean_available == False:
-            self.ftmode = 'gfft'
-            print 'Wsclean is not available. Gridding routines are set to '\
-                +'default despite different user input'
-        self.check_default('init_type_s', parset, 'const', dtype=str)
-        self.check_default('init_type_u', parset, 'const',dtype=str)
-        self.check_default('rho0', parset, 1, dtype = str)
-        if not self.rho0 == 'from_sg':
-            self.rho0 = float(self.rho0) 
-        self.check_default('freq', parset, [0,0], dtype = str)
-        if self.freq != 'wideband':
-            self.freq = np.array(self.freq.split(),dtype=int)
-        self.check_default('pspec', parset, True, dtype = bool)
-        self.check_default('pbeam', parset, False,dtype=str)
-        self.check_default('uncertainty', parset, '', dtype = str)
-        self.check_default('simulating', parset, '', dtype = bool)
-        self.check_default('sglogim', parset, '',dtype = bool)
-        if self.algorithm == 'ln-map_u':
-            self.check_default('sglogim_u', parset, '',dtype = bool)
-        if self.simulating:
-            self.parset = parset
-        self.check_default('noise_est', parset, False, dtype = str)
-        self.check_default('noise_update', parset, False, dtype = bool)
-        self.check_default('map_conv', parset, 1e-1, dtype = float)
-        self.check_default('callback', parset, 3, dtype = int)
-        if self.pspec:
-            self.check_default('init_type_p', parset, 'k^2_mon', dtype = str)
-            self.check_default('pspec_conv', parset, 1e-1, dtype = float)
-        if self.freq == 'wideband':
-            self.check_default('init_type_a', parset, 'const')
-            self.check_default('reffreq', parset, [0,0])
-            if self.reffreq != [0,0]:
-                self.reffreq = np.array(self.reffreq.split(),dtype=int)
-            self.check_default('pspec_a', parset, True, dtype = bool)
-            self.check_default('uncertainty_a', parset, '', dtype = str)
-            if self.pspec_a:
-                self.check_default('init_type_a_p', parset, 'k^2_mon')
-        
-        
-        # a few global parameters needed for callbackfunc
-        global gcallback
-        global gsave
-        gcallback = self.callback
-        gsave = self.save
-        utils.update_globvars(gsave, gcallback)
-        
-    def check_default(self, parameter, parset, default, dtype=str):
-        
-        if parameter in parset:
-            if dtype != bool:
-                setattr(self, parameter, dtype(parset[str(parameter)]))
-            else:
-                if parset[str(parameter)] == 'True':
-                    setattr(self, parameter,True)
-                elif parset[str(parameter)] == 'False' or parset[str(parameter)] == '' :
-                    setattr(self, parameter,False)                
-        else:
-            setattr(self, parameter, default)
-
-class numparameters(object):
-    """
-    Defines a numerical parameter class for all parameters that mostly control
-    numerical features and normally are kept on default values. This is being
-    done also internally (and not only on the outside-user-level) for clarity
-    so that a developer immediately knows which parameters are considered less
-    important for basic code funtionality. Performs checks on default arguments 
-    with hard-coded default values.
-    """    
-    
-    def __init__(self, params, parset):
-        
-        self.check_default('m_start', parset, 0.1, dtype = float)
-        self.check_default('global_iter', parset, 50, dtype = int)        
-        self.check_default('alpha_prior', parset, False, dtype = str)
-        if self.alpha_prior:
-            self.alpha_prior = np.array(self.alpha_prior.split(),dtype=int)
-        self.check_default('map_algo', parset, 'sd')
-        self.check_default('map_alpha', parset, 1e-4, dtype = float)
-        self.check_default('map_tol', parset, 1e-5, dtype = float)
-        self.check_default('map_clevel', parset, 3, dtype = float)
-        self.check_default('map_iter', parset, 100, dtype = int)
-        self.check_default('final_convlevel', parset, 4, dtype = float)
-        self.check_default('viscol', parset, 'data')
-        self.check_default('bins', parset, 70, dtype = float)
-        if params.noise_est == 'SNR_assumed':
-            self.check_default('SNR_assumed',parset,1,dtype = float)
-        if params.init_type_s != ('const' or 'dirty'):
-            self.check_default('zoomfactor', parset, 1, dtype = float)
-        
-        self.check_default('pspec', parset, True, dtype = bool)
-        
-        if params.pspec:
-            
-            self.check_default('pspec_algo', parset, 'cg')
-            self.check_default('smoothing', parset, 10, dtype = float)
-            self.check_default('M0_start', parset, 0, dtype = float)
-            self.check_default('p0', parset, 1, dtype = float)
-            self.check_default('pspec_tol', parset, 1e-3, dtype = float)
-            self.check_default('pspec_clevel', parset, 3, dtype = float)
-            self.check_default('pspec_iter', parset, 150, dtype = float)
-            self.check_default('ncpu', parset, 2, dtype = float)
-            self.check_default('nrun', parset, 8, dtype = float)
-
-        if params.freq == 'wideband':
-            
-            self.check_default('wb_globiter', parset, 10, dtype = float)
-            self.check_default('m_a_start', parset, 0.1, dtype = float)
-            self.check_default('global_iter_a', parset, 50, dtype = float)
-            self.check_default('alpha_prior_a', parset, False, dtype=str)
-            if self.alpha_prior_a:
-               self.alpha_prior_a = np.array(self.alpha_prior_a.split(),\
-                   dtype=int)
-            self.check_default('map_alpha_a', parset, 1e-4, dtype = float)
-            self.check_default('map_tol_a', parset, 1e-5, dtype = float)
-            self.check_default('map_clevel_a', parset, 3, dtype = float)
-            self.check_default('map_iter_a', parset, 100, dtype = float)
-            if params.init_type_a != 'const':
-                self.check_default('zoomfactor', parset, 1, dtype = float)
-            
-            if params.pspec_a:
-                
-                self.check_default('smoothing_a', parset, 10, dtype = float)
-                self.check_default('M0_start_a', parset, 0, dtype = float)
-                self.check_default('bins_a', parset, 70, dtype = float)
-                self.check_default('p0_a', parset, 1, dtype = float)
-                self.check_default('pspec_tol_a', parset, 1e-3, dtype = float)
-                self.check_default('pspec_clevel_a', parset, 3, dtype = float)
-                self.check_default('pspec_iter_a', parset, 150, dtype = float)
-                self.check_default('ncpu_a', parset, 2, dtype = float)
-                self.check_default('nrun_a', parset, 8, dtype = float)
-                
-        if params.algorithm == 'ln-map_u':
-            
-            self.check_default('m_u_start', parset,0.1, dtype = float)
-            self.check_default('beta', parset,1.5, dtype = float)
-            self.check_default('eta', parset,1e-7, dtype = float)
-            self.check_default('map_alpha_u', parset,1e-4, dtype = float)
-            self.check_default('map_tol_u', parset,1e-5, dtype = float)
-            self.check_default('map_clevel_u', parset,3, dtype = float)
-            self.check_default('map_iter_u', parset,100, dtype = float)
-            self.algo_liste = self.set_algo_liste(self.map_algo)
-            
-    def set_algo_liste(self,st):
-        
-        scipyminimizer = ('TNC','COBYLA','SLSQP','dogleg','trust-ncg',\
-            'CG','BFGS', 'L-BFGS-B','Nelder-Mead','Powell','Newton-CG')
-    
-        if st == 'sd':
-            return ['sd_u','sd_m','ps_rec']
-        elif st in scipyminimizer:
-            return [st,'ps_rec']
-        else:
-            return np.array(st.split(),dtype=str)
-        
-    def check_default(self, parameter, parset, default, dtype=str):
-        
-        if parameter in parset:
-            if dtype != bool:
-                setattr(self, parameter, dtype(parset[str(parameter)]))
-            else:
-                if parset[str(parameter)] == 'True':
-                    setattr(self, parameter,True)
-                elif parset[str(parameter)] == 'False' or parset[str(parameter)] == '' :
-                    setattr(self, parameter,False)                
-        else:
-            setattr(self, parameter, default)
-
-
-def parse_input_file(parsetfn, save, verbosity):
-    """ parse the parameter file."""
-
-    reader = csv.reader(open(parsetfn, 'rb'), delimiter=" ",
-                        skipinitialspace=True)
-    parset = dict()
-
-    # File must fulfil: No whitespaces beyond variables; no free lines;
-    for row in reader:
-        if len(row) != 0 and row[0] != '%' and len(row)>2:
-            st = row[1]
-            for i in range(2,len(row)):             
-                st +=' '+row[i]
-            parset[row[0]] = st #row[1]+' '+row[2]
-        else:
-            parset[row[0]] = row[1]
-
-
-    params = parameters(parset, save, verbosity)       
-    
-    numparams = numparameters(params, parset)
-
-    return params, numparams
-
-
-def write_output_to_fits(m, params, notifier='',mode='I',u=None):
-    """
-    """
-
-    hdu_main = pyfits.PrimaryHDU(utils.convert_RES_to_CASA(m,FITS=True))
-    
-    try:
-        generate_fitsheader(hdu_main, params)
-    except:
-        print "Warning: There was a problem generating the FITS header, no " + \
-            "header information stored!"
-        print "Unexpected error:", sys.exc_info()[0]
-    hdu_list = pyfits.HDUList([hdu_main])
-    
-        
-    if mode == 'I':
-        hdu_list.writeto('resolve_output_' + str(params.save) +\
-                '/' + str(params.save) + '_' + 'expm' + str(notifier) + '.fits', clobber=True)
-    elif mode == 'I_u':
-        hdu_list.writeto('resolve_output_' + str(params.save) +\
-                '/' + str(params.save) + '_' + 'expu' + str(notifier) + '.fits', clobber=True)  
-    elif mode == 'I_mu':
-        hdu_list.writeto('resolve_output_' + str(params.save) +\
-                '/' + str(params.save) + '_' + 'expmu' + str(notifier) + '.fits', clobber=True)                 
-    else:
-        hdu_list.writeto('resolve_output_' + str(params.save) +\
-                '/' + str(params.save) + '_' + 'a' + str(notifier) + '.fits', clobber=True)
-
-
-def generate_fitsheader(hdu, params):
-    """
-    """
-    
-    today = datetime.datetime.today()
-    
-    #hdu.header = inhead.copy()
-    
-    hdu.header.update('ORIGIN', 'resolve.py', 'Origin of the data set')
-    
-    hdu.header.update('DATE', str(today), 'Date when the file was created')
-    
-  # hdu.header.update('OBJECT', params.summary['name'], 'Name of object')
-    
-    hdu.header.update('NAXIS', 3,
-                      'Number of axes in the data array, must be 2')
-
-    hdu.header.update('BUNIT','JY/PIXEL')
-    
-    hdu.header.update('BTYPE','Intensity')
-                      
-    hdu.header.update('NAXIS1', params.imsize,
-                      'Length of the RA axis')
-    
-    hdu.header.update('CTYPE1', 'RA---SIN', 'Axis type')
-    
-    hdu.header.update('CUNIT1', 'deg', 'Axis units')
-    
-    # In FITS, the first pixel is 1, not 0!!!
-    hdu.header.update('CRPIX1', params.imsize/2, 'Reference pixel')
-    
-    hdu.header.update('CRVAL1', params.summary['field_0']['direction']\
-    ['m0']['value'] * 57.2958, 'Reference value')
-    
-    hdu.header.update('CDELT1', -1 * params.cellsize * 57.2958, 'Size of pixel bin')
-    
-    hdu.header.update('NAXIS2', params.imsize,
-                      'Length of the RA axis')
-    
-    hdu.header.update('CTYPE2', 'DEC--SIN', 'Axis type')
-    
-    hdu.header.update('CUNIT2', 'deg', 'Axis units')
-    
-    # In FITS, the first pixel is 1, not 0!!!
-    hdu.header.update('CRPIX2', params.imsize/2, 'Reference pixel')
-    
-    hdu.header.update('CRVAL2', params.summary['field_0']['direction']\
-    ['m1']['value'] * 57.2958, 'Reference value')
-    
-    hdu.header.update('CDELT2', params.cellsize * 57.2958, 'Size of pixel bin')
-    
-    if (params.summary['field_0']['direction']['refer'] == '1950' or \
-        params.summary['field_0']['direction']['refer'] == '1950_VLA'or \
-        params.summary['field_0']['direction']['refer'] == 'B1950' or \
-        params.summary['field_0']['direction']['refer'] == 'B1950_VLA'):
-            
-        hdu.header.update('EQUINOX', 1950)
-                      
-        hdhdu.header.update('RADESYS', 'FK4')
-    
-    elif (params.summary['field_0']['direction']['refer'] == '2000' or \
-        params.summary['field_0']['direction']['refer'] == 'J2000'):
-
-        hdu.header.update('EQUINOX', 2000)
-                      
-        hdhdu.header.update('RADESYS', 'FK5')
-    
-    if params.freq == 'wideband':
-        raise NotImplementedError('No widefield FITS-cube output yet.')
-    else:
-        hdu.header.update('NAXIS3', 1, 'Length of frequency axis')
-        
-        hdu.header.update('CTYPE3', 'FREQ', 'Axis type')
-        
-        hdu.header.update('CRVAL3', params.freqs[params.freq[0],params.freq[1]]\
-            , 'Frequency Reference value')
-            
-        
-    hdu.header.add_history('RESOLVE: Reconstruction performed by ' +
-                               'resolve.py.')
-
-    
-    hdu.header.__delitem__('NAXIS4')
-    hdu.header.__delitem__('CTYPE4')
-    hdu.header.__delitem__('CRVAL4')
-    hdu.header.__delitem__('CRPIX4')
-    hdu.header.__delitem__('CDELT4')
-    hdu.header.__delitem__('CUNIT4')
- 
+#------------------- Command Line Parsing ------------------------------------- 
 
 if __name__ == "__main__":
     
     parser = argparse.ArgumentParser()
-    parser.add_argument("parsetfn", type=str,
-                        help="name of parset file to use")
+    parser.add_argument("datafn",type=str,
+                        help="directory of numpy-saved visibility data files.")
+    parser.add_argument("cell",type=float,
+                        help="cellsize in arcsec.")
+    parser.add_argument("imsize",type=int, 
+                        help="Imsize in number of pixel.")
+    parser.add_argument("resolve_mode",type=str,
+                        help="Indicates the mode of package that should be"\
+                        + " used, see documentation.")
     parser.add_argument("-s","--save", type=str, default='save',
                         help="output string for save directories.")
-    parser.add_argument("-c","--casaload", type=bool, default=False,
-                        help="attempt to read data using CASA. Not yet"\
-                            +' fully implemented!')
+    parser.add_argument("-p","--python_casacore", type=str, default=False,
+                        help="Uses the python-casacore bindings to read "
+                             + "data directly from the measurement set. Use "
+                             + " the datafn argument to indicate the ms.")                    
     parser.add_argument("-v","--verbosity", type=int, default=2,
                         help="Reset verbosity level of code output. Default"\
                             +' is 2/5.')                    
     args = parser.parse_args()
     
-    if args.casaload:
-        raise NotImplementedError('Direct casaload-feature not yet'\
-            +' implemented. Please provide ms-data in numpy-array form.')
+    # Load the runfiles and parameter-change-files for the requested resolve 
+    # mode
+    if not '.run' in args.resolve_mode:
+        args.resolve_mode = args.resolve_mode + '.run'
+    runlist, changeplist = pars.get_parameter_and_runscript_from_runfile(\
+        args.resolve_mode)
+    # Load the default parameter set
+    params = pars.parameters(pars.load_default_parameters(), args.datafn, \
+                            args.imsize, args.cell, args.save, 
+                            args.python_casacore, args.verbosity)
     
-    #this is done for greater customization and control of file parsing than
-    #doing it directly with a file-type in argparse     
-    params, numparams = parse_input_file(args.parsetfn, args.save, args.verbosity)
-    
-    resolve(params, numparams)
+    resolve(runlist, changeplist, params)

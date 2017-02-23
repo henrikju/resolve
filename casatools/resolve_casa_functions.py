@@ -31,11 +31,12 @@ import scipy.ndimage.interpolation as sci
 from casa import image as ia
 import casa
 
-import utility_functions as utils
+#import utility_functions as utils
 
 
 
 #------------------------CASA-MS-I/O wrapper-----------------------------------
+
 
 def read_data_withCASA(ms, viscol="DATA", noisecol='SIGMA', \
     mode='tot', noise_est = False, save=None):
@@ -143,7 +144,7 @@ def read_image_from_CASA(casaimagename,zoomfactor, outn):
     ia.close()
     
     image = sci.zoom(image,zoom=zoomfactor)
-    np.save(outn,utils.convert_CASA_to_RES(image))
+    np.save(outn,convert_CASA_to_RES(image))
 
 def read_model_from_CASA(casaimagename,zoomfactor, outn):
 
@@ -156,5 +157,5 @@ def read_model_from_CASA(casaimagename,zoomfactor, outn):
     ia.close()
     
     image = sci.zoom(image,zoom=zoomfactor)
-    np.save(outn,utils.convert_CASA_to_RES(image))    
+    np.save(outn,convert_CASA_to_RES(image))    
         
