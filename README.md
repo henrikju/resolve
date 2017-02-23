@@ -7,7 +7,7 @@ Please contact Henrik.Junklewitz@gmail.com for any details or problems.
 
 RESOLVE is a Bayesian inference package for image reconstruction in radio interferometry.
 
-Stable features:
+## Stable features:
 
 - parameter-free Bayesian image reconstruction of radio continuum data with a focus on extended and weak diffuse sources.
 - approximate posterior uncertainty map for the image dependent on the reconstructed image and on estimated measurement noise.
