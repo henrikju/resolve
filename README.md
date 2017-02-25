@@ -116,6 +116,27 @@ reconstruction. Conceptionally similar to classical major-minor cycles in CLEAN 
 but less accurate results. Works well in high signal-to-noise cases. Change the string 'fastresolve' to 'fastresolve_crude' 
 in above modes.
 
+
+--------------------------------------------------------------------------------------------------------------------------------
+## Relevant Publications
+--------------------------------------------------------------------------------------------------------------------------------
+
+- RESOLVE: A new algorithm for aperture synthesis imaging of extended emission in radio astronomy
+http://adsabs.harvard.edu/abs/2016A%26A...586A..76J
+
+- A new approach to multifrequency synthesis in radio interferometry 
+http://adsabs.harvard.edu/abs/2015A%26A...581A..59J
+
+- fastRESOLVE: fast Bayesian imaging for aperture synthesis in radio astronomy
+http://adsabs.harvard.edu/cgi-bin/nph-data_query?bibcode=2016arXiv160504317G&db_key=PRE&link_type=ABSTRACT
+
+- NIFTY - Numerical Information Field Theory. A versatile PYTHON library for signal inference
+http://adsabs.harvard.edu/cgi-bin/nph-data_query?bibcode=2013A%26A...554A..26S&db_key=AST&link_type=ABSTRACT
+
+- Information field theory for cosmological perturbation reconstruction and nonlinear signal analysis
+http://adsabs.harvard.edu/cgi-bin/nph-data_query?bibcode=2009PhRvD..80j5005E&db_key=AST&link_type=ABSTRACT&high=5508ca396122870
+
+
 ----------------------------------------------------------------------------------------------------------------------------
 
 For more information, soon, you can refer to the [RESOLVE Wiki](https://github.com/henrikju/resolve/wiki).
