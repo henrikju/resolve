@@ -1,0 +1,16 @@
+1
+point_resolve_map_u pointresolve_fast_prerun.cfg
+
+5
+point_resolve_map_m pointresolve_fast_m.cfg
+point_resolve_map_u pointresolve_fast_u.cfg
+
+1
+resolve_pspec pointresolve_fast_m.cfg
+
+5
+point_resolve_map_u pointresolve_fast_u.cfg
+point_resolve_map_m pointresolve_fast_m.cfg
+
+1
+resolve_pspec pointresolve_fast_m.cfg

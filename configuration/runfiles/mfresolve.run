@@ -1,0 +1,5 @@
+20
+resolve_map mfresolve.cfg
+resolve_pspec mfresolve.cfg
+mf_resolve_map_alpha mfresolve.cfg
+mf_resolve_pspec_a mfresolve.cfg

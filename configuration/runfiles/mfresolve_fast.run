@@ -1,0 +1,5 @@
+20
+resolve_map mfresolve_fast.cfg
+resolve_pspec mfresolve_fast.cfg
+mf_resolve_map_alpha mfresolve_fast.cfg
+mf_resolve_pspec_a mfresolve_fast.cfg
