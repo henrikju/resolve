@@ -1,13 +1,13 @@
 # RESOLVE - A Bayesian algorithm for aperture synthesis imaging in radio astronomy
 
 -------------------------------------------------------------------------------------------------------------------------------
-ATTENTION: the code is constantly being updated with new features, and parts will be heavily non-tested and not well documented. 
-Please contact henrikju@astro.uni-bonn.de for any details or problems. 
+## ATTENTION: part of the code is constantly being updated with new features, and so will be heavily non-tested and not well documented. 
+## Please contact Henrik.Junklewitz@gmail.com for any details or problems. 
 -------------------------------------------------------------------------------------------------------------------------------
 
 RESOLVE is a Bayesian inference package for image reconstruction in radio interferometry.
 
-Stable features:
+### Stable features:
 
 - parameter-free Bayesian image reconstruction of radio continuum data with a focus on extended and weak diffuse sources.
 - approximate posterior uncertainty map for the image dependent on the reconstructed image and on estimated measurement noise.
@@ -16,22 +16,22 @@ Stable features:
 - support for measurement sets.
 - included simple radio interferometric simulation tool (if uv-coverage is provided).
 
-Experimental (less tested) features:
+### Experimental (less tested) features:
 
 - PointResolve module, allowing for the simultaneous imaging and separation of point and extended sources. 
 - rough noise estimation routine, additional inferring the visibility noise variance; 
 possibly more robust in high noise cases, against outliers or wrongly measured noise
 - usage of wsclean(LINK) functions for performance and functionality can be activated. Mostly gridding routines and w-stacking. Wsclean needs to be installed.
 
-Highly Experimental (only really tested in simulations):
+### Highly Experimental (only really tested in simulations):
 
 - Multi-frequency RESOLVE, allowing for simultaneous reconstruction of total intensity and spectral index.
 
 --------------------------------------------------------------------------------------------------------------------------------
-Quick installation guide
+## Quick installation guide
 --------------------------------------------------------------------------------------------------------------------------------
 
-Prerequisite libraries:
+### Prerequisite libraries:
 - the full python package: numpy, scipy, pyfits, matplotlib, cython
 - the statistical inference package [nifty](https://github.com/information-field-theory/nifty)
 - the general Fourier transform package [gfft](https://github.com/mrbell/nifty)
@@ -41,23 +41,25 @@ Prerequisite libraries:
 - optional: the astropy package for astronomical coordinate system support in numpy images. 
 
 --------------------------------------------------------------------------------------------------------------------------------
-Quick start guide
+## Quick start guide
 --------------------------------------------------------------------------------------------------------------------------------
 
 RESOLVE is a python package with much functionality actually being deferred to underlying C routines. For the end user it is 
 simply started as a command line python tool using the main function resolve.py:
 
-python resolve.py <data pathname> <imsize> <cellsize> <resolve mode> 
+python resolve.py *data_pathname imsize cellsize resolve mode*
 
-Options:
+### Options:
 
 -s <custom save directory suffix>
 -p use python-casacore module for direct read-in of measurement sets (as opposed to the "casatools" procedure indicated below).
 -v verbosity, range 1(only headers) to 5(diagnostic outputs); default:2
 
-Description of arguments:
+### Arguments:
 
-<data pathname> path to the visibility data.
+*data_pathname* 
+
+Path to the visibility data.
 
 It is possible to directly read in measurement sets using the python-casacore module with the "-p" flag. The <data pathname> points to	   the measurememt set.
 
@@ -73,11 +75,17 @@ If the wsclean functions are used, this needs to be again the pathname of the me
 
 (A more generalized interface for RESOLVE to measurement sets might get developed at some point.)
 
-<imsize> Size of image in numbers of pixels of one axis. Choose as in standard CLEAN imaging.
+*imsize* 
 
-<cellsize> Size of one pixel in rad. Choose as in standard CLEAN imaging.
+Size of image in numbers of pixels of one axis. Choose as in standard CLEAN imaging.
 
-<resolve_mode> Activates one of the available RESOLVE modes, employing different features of the package with sets of 
+*cellsize* 
+
+Size of one pixel in rad. Choose as in standard CLEAN imaging.
+
+*resolve_mode* 
+
+Activates one of the available RESOLVE modes, employing different features of the package with sets of 
 (more or less) robust default parameters for the underlying inference and optimization routines. The idea is that for
 'standard cases' and high SNR, the end user only has to choose from these and doesn't need to bother with the complex
 numerical details. Every interested user can define custom modes and change virtually all parameters and combinations 
@@ -107,6 +115,27 @@ reconstruction. Conceptionally similar to classical major-minor cycles in CLEAN 
 - the fastresolve modes can sped up further while using more approximations to the numerics. This results in evem faster
 but less accurate results. Works well in high signal-to-noise cases. Change the string 'fastresolve' to 'fastresolve_crude' 
 in above modes.
+
+
+--------------------------------------------------------------------------------------------------------------------------------
+## Relevant Publications
+--------------------------------------------------------------------------------------------------------------------------------
+
+- RESOLVE: A new algorithm for aperture synthesis imaging of extended emission in radio astronomy
+http://adsabs.harvard.edu/abs/2016A%26A...586A..76J
+
+- A new approach to multifrequency synthesis in radio interferometry 
+http://adsabs.harvard.edu/abs/2015A%26A...581A..59J
+
+- fastRESOLVE: fast Bayesian imaging for aperture synthesis in radio astronomy
+http://adsabs.harvard.edu/cgi-bin/nph-data_query?bibcode=2016arXiv160504317G&db_key=PRE&link_type=ABSTRACT
+
+- NIFTY - Numerical Information Field Theory. A versatile PYTHON library for signal inference
+http://adsabs.harvard.edu/cgi-bin/nph-data_query?bibcode=2013A%26A...554A..26S&db_key=AST&link_type=ABSTRACT
+
+- Information field theory for cosmological perturbation reconstruction and nonlinear signal analysis
+http://adsabs.harvard.edu/cgi-bin/nph-data_query?bibcode=2009PhRvD..80j5005E&db_key=AST&link_type=ABSTRACT&high=5508ca396122870
+
 
 ----------------------------------------------------------------------------------------------------------------------------
 
