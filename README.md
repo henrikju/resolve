@@ -93,28 +93,20 @@ of sub-routines. This way the more experimental features like PointResolve or MF
 For details see the wiki. 
 Current default modes:
 
-- 'standard_resolve': standard extended sources prior only (link paper). Full gridding and many changes between
+- 'resolve': standard extended sources prior only (link paper). Full gridding and many changes between
  visibility and image space. In principle accurate but very slow. Bright point sorces will cause a problem and
  possibly be smoothed out
- 
-- 'standard_uncertainty': calculate an approximate posterior uncertainty for a given reconstructed image. 
-Stand-alone uncertainty calculation. Last image needs to be specified by hand in 
-/configuration/parameters/standard_uncertainty.cfg.
 
-- 'fastresolve': standard extended sources prior only (link paper). Uses the fastresolve approximation to speed up
+- 'resolve_fast': standard extended sources prior only (link paper). Uses the fastresolve approximation to speed up
 computation time (uo to a few 100 times faster). Bright point sorces will cause a problem and
  possibly be smoothed out.
- 
-- 'fastresolve_uncertainty': calculate an approximate posterior uncertainty for a given reconstructed image while using
-the fastresolve approcimation. Stand-alone uncertainty calculation. Last image needs to be specified by hand in 
-/configuration/parameters/fastresolve_uncertainty.cfg.
 
-- 'fastresolve_resolve': runs first fastresolve to obtain a good starting guess for a follow up, more accurate Resolve 
-reconstruction. Conceptionally similar to classical major-minor cycles in CLEAN imaging.
+- 'standard_resolve': runs first fastresolve to obtain a good starting guess for a follow up, more accurate Resolve 
+reconstruction. Conceptionally similar to classical major-minor cycles in CLEAN imaging. Should be the "standard blind" choice.
 
-- the fastresolve modes can sped up further while using more approximations to the numerics. This results in evem faster
-but less accurate results. Works well in high signal-to-noise cases. Change the string 'fastresolve' to 'fastresolve_crude' 
-in above modes.
+- '*_uncertainty': calculate an approximate posterior uncertainty for a given reconstructed image for the given setup in '*'. Stand-alone uncertainty calculation. Last image needs to be specified by hand in
+
+- '*_simulation': run the chosen RESOLVE mode while simulating a data set. This mode needs a given uv-coverage to work.
 
 
 --------------------------------------------------------------------------------------------------------------------------------
