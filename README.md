@@ -51,8 +51,10 @@ python resolve.py *data_pathname imsize cellsize resolve mode*
 
 ### Options:
 
--s <custom save directory suffix>
+-s custom save directory suffix
+
 -p use python-casacore module for direct read-in of measurement sets (as opposed to the "casatools" procedure indicated below).
+
 -v verbosity, range 1(only headers) to 5(diagnostic outputs); default:2
 
 ### Arguments:
