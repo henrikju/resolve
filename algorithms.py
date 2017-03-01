@@ -337,4 +337,85 @@ def noise_estimation(mapguess, d, R, params, logger):
     est_var = params.reg_var * est_var + (1-params.reg_var) * est_var.mean()
     
     return est_var
+
+# experimental and being tested         
+def simple_point_sources(m, Ipoint, d, R, params, git, logger, t=1.75, 
+                         max_point=100, g=0.2, mode='total'):
+    """
+    Fastresolve simple point algorithm, very similar to CLEAN. Only tested 
+    with fastResolve response kernel. See Greiner et al. 2016.
+    """
+
+    logger.header1("Run RESOLVE simple point source estimation cycle.")
+
+    # Very crude version of a simplified Hogbom CLEAN without the need
+    # for devonvolution since it is performed on a MAP map.
+    # Ideally run with very few iterations between new shallow extended
+    # estimates.
+
+    if mode == 'total':
+        
+        Iorg = exp(m)
+    
+        mask = np.ones(np.shape(m))
+        mask[450:595,410:543] = 0
+        I = Iorg * mask
+
+        check = True
+        Niter = 0
+
+        while (check and Niter<1000):
+            print 'Niter', Niter
+            Itemp = I+0.
+            Itemp[np.where(Itemp.val < Itemp.max()/t)] = 0.
+            Itemp *= g #(1-1./t)
+            print '# of proposed point sources', ((Ipoint+Itemp).val > 0).sum()
+            # stop when simple heuristic max_point is reached. Nothing fancy here.
+            if (((Ipoint+Itemp).val > 0).sum() >= max_point):
+                print 'done, exceeded maxpoint!'
+                check=False
+            else:
+                #Ipoint += Itemp
+                #Ipoint[Ipoint>I] = I[Ipoint>I]
+                check=False
+                for i in range(params.imsize):
+                    for j in range(params.imsize):
+                        if ((Ipoint[i,j]+Itemp[i,j]<I[i,j]) and Itemp[i,j]>0):
+                            print 'add point source'
+                            Ipoint[i,j] += Itemp[i,j]
+                            check = True
+                        elif ((Ipoint[i,j]+Itemp[i,j]>I[i,j]) and Itemp[i,j]>0):
+                            break
+
+            Niter += 1
+
+        I = Iorg-Ipoint
+        I[I==0] = 1e-6
+        m = log(I)
+
+
+    if mode == 'simple_clean':
+        
+        raise NotImplementedError('Simple clean routine not yet implemented.')
+          
+        
+    return m, Ipoint
          
+# experimental and being tested
+def posterior_sampling():
+    """
+    Samples the posterior. Probably only working with fastResolve kernel.
+    """
+    
+    raise NotImplementedError("Posterior sampling planned, but not included"\
+        + " yet")
+        
+# experimental and being tested
+def gibbs_energy_map():
+    """
+    Tries a simple Gibbs Energy map reconstruction (added Ds, but only 
+    the diagonal).
+    """
+    
+    raise NotImplementedError("Gibbs energy planned, but not included"\
+        + " yet")
